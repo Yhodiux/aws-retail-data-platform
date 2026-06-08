@@ -283,7 +283,7 @@ aws-retail-data-platform
 ---
 ## Power BI Dashboard
 
-![Dashboard](docs/screenshots/dashboard.png)
+![Dashboard](docs/screenshoots/dashboard.png)
 
 ---
 
