@@ -281,6 +281,11 @@ aws-retail-data-platform
 - Infrastructure as Code (Terraform)
 
 ---
+## Power BI Dashboard
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+---
 
 # Dataset
 
