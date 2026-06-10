@@ -3,7 +3,7 @@ from awsglue.utils import getResolvedOptions
 from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
-from pyspark.sql.functions import col, countDistinct, count, sum as spark_sum, avg, round
+from pyspark.sql.functions import col, countDistinct, count, sum as spark_sum, avg, round, coalesce, lit
 
 args = getResolvedOptions(sys.argv, ["JOB_NAME"])
 
@@ -30,7 +30,7 @@ sales_by_category_df = (
     orders_df.alias("o")
     .join(order_items_df.alias("oi"), col("o.order_id") == col("oi.order_id"), "inner")
     .join(products_df.alias("p"), col("oi.product_id") == col("p.product_id"), "left")
-    .groupBy(col("p.product_category_name").alias("product_category_name"))
+    .groupBy(coalesce(col("p.product_category_name"), lit("UNKNOWN")).alias("product_category_name"))
     .agg(
         countDistinct(col("o.order_id")).alias("total_orders"),
         count(col("oi.product_id")).alias("total_items"),
