@@ -28,6 +28,7 @@ This project was designed following enterprise Data Engineering practices includ
 - Exposed curated datasets through Athena and Power BI.
 - Implemented event-driven monitoring using Amazon EventBridge.
 - Configured automated failure notifications through Amazon SNS email alerts.
+- Implemented a reusable Python framework for AWS Glue jobs.
 
 ---
 
@@ -83,6 +84,85 @@ Data Quality Validation
 ```
 
 ![AWS Glue Workflow](docs/screenshots/workflow.png)
+
+---
+
+## Reusable Framework
+
+To improve maintainability and reduce code duplication, a shared Python library was implemented and deployed as a Glue dependency.
+
+The library is packaged as:
+
+```text
+scripts/libs/common.zip
+```
+
+Containing:
+
+```text
+common/
+├── config.py
+├── logger.py
+└── utils.py
+```
+
+### Configuration Management
+
+Centralized configuration is stored in `config.py`:
+
+```python
+BUCKET_NAME = "olist-data-engineering-otto"
+
+RAW_BASE_PATH = f"s3://{BUCKET_NAME}/raw"
+SILVER_BASE_PATH = f"s3://{BUCKET_NAME}/silver"
+GOLD_BASE_PATH = f"s3://{BUCKET_NAME}/gold"
+
+RAW_DATABASE = "olist_raw_db"
+SILVER_DATABASE = "olist_silver_db"
+GOLD_DATABASE = "olist_gold_db"
+```
+
+This allows all ETL jobs to use a single source of configuration, making updates easier and reducing the risk of inconsistencies across jobs.
+
+### Centralized Logging
+
+A reusable logger was implemented:
+
+```python
+logger = get_logger(args["JOB_NAME"])
+```
+
+This standardizes logging across all Glue jobs and simplifies troubleshooting and monitoring.
+
+### Shared Utilities
+
+Common utility functions were created to encapsulate repetitive tasks:
+
+- DataFrame row count logging
+- Standardized Parquet writing
+- Reusable helper functions
+
+Example:
+
+```python
+log_dataframe_count(df, logger, "sales_by_state")
+
+write_parquet(
+    df,
+    output_path,
+    mode="overwrite",
+    partitions=1
+)
+```
+
+### Benefits
+
+- Reduced code duplication
+- Easier maintenance
+- Consistent logging across ETL jobs
+- Centralized configuration management
+- Improved code readability
+- Reusable ETL framework for future pipelines
 
 ---
 
@@ -249,6 +329,8 @@ SQL
 
 ![Athena Analytics](docs/screenshots/athena_queries.png)
 
+Example query:
+
 ```sql
 SELECT *
 FROM sales_by_state
@@ -260,8 +342,6 @@ Query scripts:
 ```text
 sql/queries.sql
 ```
-
-
 
 ---
 
@@ -293,8 +373,16 @@ aws-retail-data-platform
 │   └── project_overview.md
 │
 ├── scripts
+│   ├── common
+│   │	├──	config.py
+│   │	├──	logger.py
+│   │	└── utils.py
+│	│
 │   ├── silver
 │   └── gold
+│
+├── libs
+│   └── common.zip
 │
 ├── sql
 │   └── queries.sql
@@ -388,6 +476,8 @@ Event Pattern:
     "state": ["FAILED"]
   }
 }
+```
+
 ---
 
 ## Future Improvements
