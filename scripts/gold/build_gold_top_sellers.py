@@ -1,4 +1,7 @@
 import sys
+from common.config import SILVER_BASE_PATH, GOLD_BASE_PATH
+from common.logger import get_logger
+from common.utils import log_dataframe_count, write_parquet
 from awsglue.utils import getResolvedOptions
 from pyspark.context import SparkContext
 from awsglue.context import GlueContext
@@ -14,13 +17,13 @@ spark = glueContext.spark_session
 job = Job(glueContext)
 job.init(args["JOB_NAME"], args)
 
-bucket = "s3://olist-data-engineering-otto"
+logger = get_logger(args["JOB_NAME"])
+logger.info("Starting Gold job: top_sellers")
 
-orders_path = f"{bucket}/silver/orders/"
-order_items_path = f"{bucket}/silver/order_items/"
-sellers_path = f"{bucket}/silver/sellers/"
-
-gold_output_path = f"{bucket}/gold/top_sellers/"
+orders_path = SILVER_BASE_PATH + "/orders/"
+order_items_path = SILVER_BASE_PATH + "/order_items/"
+sellers_path = SILVER_BASE_PATH + "/sellers/"
+gold_output_path = GOLD_BASE_PATH + "/top_sellers/"
 
 orders_df = spark.read.parquet(orders_path)
 order_items_df = spark.read.parquet(order_items_path)
@@ -42,7 +45,6 @@ top_sellers_df = (
     .withColumn("total_sales", round(col("total_sales"), 2))
     .orderBy(col("total_sales").desc())
 )
-
-top_sellers_df.coalesce(1).write.mode("overwrite").parquet(gold_output_path)
-
+log_dataframe_count(top_sellers_df, logger, "top_sellers")
+write_parquet(top_sellers_df,gold_output_path,mode="overwrite",partitions=1)
 job.commit()

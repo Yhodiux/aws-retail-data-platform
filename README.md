@@ -375,6 +375,19 @@ Email Notification
 
 ![EventBridge SNS Notification](docs/screenshots/mail_fail.png)
 
+The monitoring rule is implemented using Amazon EventBridge and listens for FAILED state changes on the Data Quality Glue job.
+
+Event Pattern:
+
+```json
+{
+  "source": ["aws.glue"],
+  "detail-type": ["Glue Job State Change"],
+  "detail": {
+    "jobName": ["olist-data-quality-gold-job"],
+    "state": ["FAILED"]
+  }
+}
 ---
 
 ## Future Improvements
