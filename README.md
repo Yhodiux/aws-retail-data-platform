@@ -26,6 +26,8 @@ This project was designed following enterprise Data Engineering practices includ
 - Executed Gold layer aggregations in parallel.
 - Implemented automated Data Quality validation with fail-fast pipeline controls.
 - Exposed curated datasets through Athena and Power BI.
+- Implemented event-driven monitoring using Amazon EventBridge.
+- Configured automated failure notifications through Amazon SNS email alerts.
 
 ---
 
@@ -331,6 +333,8 @@ aws-retail-data-platform
 - End-to-end pipeline automation
 - Fail-fast validation strategy
 - Enterprise ETL design pattern
+- EventBridge monitoring for Glue job failures
+- Automated SNS email notifications
 
 ---
 
@@ -349,6 +353,27 @@ Automated validation layer implemented using AWS Glue and PySpark.
 | top_sellers | seller_id NOT NULL |
 
 Pipeline execution fails automatically when a validation rule is violated.
+
+### Failure Monitoring and Alerting
+
+The platform includes event-driven monitoring using Amazon EventBridge and Amazon SNS.
+
+When the Data Quality job fails, EventBridge captures the Glue Job State Change event and automatically triggers an SNS email notification.
+
+```text
+Glue Data Quality Job
+    ↓
+FAILED
+    ↓
+Amazon EventBridge
+    ↓
+Amazon SNS
+    ↓
+Email Notification
+```
+![Data Quality Job Failure](docs/screenshots/job_fail.png)
+
+![EventBridge SNS Notification](docs/screenshots/mail_fail.png)
 
 ---
 
