@@ -358,7 +358,7 @@ Examples:
 - Top Customers
 
 
-![Dashboard](docs/screenshots/dashboard.png)
+![Dashboard](docs/screenshots/dashboard.PNG)
 
 ---
 
