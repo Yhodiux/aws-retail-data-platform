@@ -113,4 +113,27 @@ Pending work:
 4. Review and commit the resulting local release.
 5. Publish the repository and execute the documented AWS deployment when ready.
 
-Resume point: configure `terraform.tfvars`, inspect the existing AWS account, and prepare resource imports before the first apply.
+Resume point: complete Athena reconciliation, deploy/run Silver referential validation, validate Power BI refresh, and retire the legacy bucket only after downstream sign-off.
+
+## AWS deployment record — 2026-06-20
+
+- Commit: `14dcc0d`.
+- Region: `us-east-1`.
+- Terraform apply: 18 resources updated in place; none created or destroyed.
+- Data bucket: `olist-retail-data-dev-us-east-1-793a6f`.
+- Terraform state: remote, encrypted, locked, and versioned in S3.
+- Glue IAM access: least-privilege inline policy for the new data bucket.
+- Core Silver isolated validation: `customers`, `orders`, `products`, `sellers`, `order_items`, and `payments` succeeded.
+- Silver crawler: succeeded against the new bucket.
+- Five isolated Gold jobs: succeeded.
+- Gold crawler: succeeded; canonical tables were rebuilt against the new locations and schemas.
+- Gold quality retry: succeeded (`jr_6fcc9c46c4d1b5bc9a2c24fd55af70449091bda282ab8b458512e85879e3fb7f`).
+- Complete workflow: succeeded (`wr_b458d74ded2ad229d99690a887f659776f48ea065fa9f5849f5c866ff67d4593`).
+- Terraform post-deployment plan: no drift.
+
+Remaining validation:
+
+- Deploy and run the Silver referential-integrity job.
+- Execute Athena reconciliation queries.
+- Refresh and validate Power BI.
+- Keep the legacy bucket unchanged until all downstream checks pass.

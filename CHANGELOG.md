@@ -61,3 +61,5 @@ All notable repository changes will be documented in this file. AWS deployment s
 - Recorded the release sequence decision: manual repository reorganization, Terraform implementation, repository publication, and final AWS deployment.
 - Changed repository validation to reject tracked CSV files while allowing ignored local source snapshots.
 - Parameterized Glue bucket, database, and environment configuration through job arguments with backward-compatible defaults.
+- Migrated the AWS pipeline to a non-personal, versioned S3 bucket and reconciled existing resources into Terraform state.
+- Added least-privilege Glue access to the new bucket and completed isolated Silver/Gold, crawler, Gold-quality, and end-to-end workflow validation in AWS.
