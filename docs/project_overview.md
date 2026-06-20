@@ -1,42 +1,37 @@
-# Olist Retail Data Platform
+# Project Overview
 
-AWS Data Lakehouse Project
+The AWS Retail Data Platform is a portfolio implementation of a medallion-style analytics data lake for the public Olist ecommerce dataset.
 
-## Architecture
+## Objective
 
-CSV Files
-→ S3 Raw
-→ Glue Silver ETL
-→ S3 Silver
-→ Glue Gold Aggregations
-→ S3 Gold
-→ Glue Catalog
-→ Athena
-→ Power BI
+Demonstrate practical AWS data-engineering skills across ingestion design, PySpark ETL, schema management, data quality, workflow orchestration, SQL analytics, monitoring, and business reporting.
 
-## Technologies
+## Flow
 
-- Amazon S3
-- AWS Glue
-- AWS Glue Catalog
-- Amazon Athena
-- PySpark
-- Parquet
-- Power BI
+```text
+Olist CSV -> S3 Raw -> Glue Silver -> S3 Silver -> Glue Gold
+          -> S3 Gold -> Data Catalog -> Athena -> Power BI
+```
 
-## Layers
+Silver applies explicit schemas and table-level quality controls. A separate quality job checks parent-child relationships. Gold produces five backward-compatible analytical datasets with additional delivered-order metrics.
 
-### Raw
-Original Olist datasets
+## Operational design
 
-### Silver
-Cleaned and standardized datasets
+- Glue Workflow coordinates conditional and parallel processing.
+- CloudWatch stores Glue logs.
+- EventBridge routes Glue failure events to SNS email notifications.
+- Athena provides reconciliation and analytical queries.
+- Docker runs deterministic PySpark tests locally without AWS credentials.
 
-### Gold
-Business metrics datasets
+## Current status
 
-- sales_by_state
-- sales_by_category
-- sales_by_payment_type
-- top_sellers
-- top_customers
+Local implementation and tests are complete. AWS deployment and runtime validation of the new code are deferred to a final controlled phase. Infrastructure as Code and CI/CD remain roadmap items.
+
+## Detailed documentation
+
+- [Current status](project-status.md)
+- [Silver contracts](silver-data-contracts.md)
+- [Gold contracts](gold-data-contracts.md)
+- [Logical data model](data_model/logical_model.md)
+- [Testing guide](testing-guide.md)
+- [Final AWS deployment order](deployments/final-deployment-order.md)

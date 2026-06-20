@@ -1,504 +1,226 @@
 # AWS Retail Data Platform
 
-End-to-end AWS Data Lakehouse project built using Amazon S3, AWS Glue, Athena, PySpark and Power BI.
+Portfolio project demonstrating an end-to-end AWS analytics data platform for the public Olist Brazilian ecommerce dataset. It uses a medallion-style data lake on Amazon S3, AWS Glue and PySpark transformations, automated data-quality controls, Athena, and Power BI.
 
----
+> Repository status: Gold enhancements, explicit Silver schemas, stronger quality controls, and local tests are complete locally. Their consolidated AWS deployment is intentionally deferred. See [project status](docs/project-status.md).
 
-## Project Overview
+## Documentation
 
-This project implements a modern Data Lakehouse architecture using AWS services to process and analyze the Olist Brazilian E-Commerce Dataset.
-The solution follows a multi-layer architecture:
-
-```text
-Raw → Silver → Gold → Analytics
-```
-
-The platform ingests raw ecommerce data, standardizes and cleans it through ETL processes, generates business-oriented datasets, and exposes them for analytics through Athena and Power BI.
-This project was designed following enterprise Data Engineering practices including layered architecture, workflow orchestration, parallel processing, metadata management, and automated data quality controls.
-
----
-
-## Key Achievements
-
-- Designed and implemented a complete AWS Data Lakehouse architecture.
-- Built automated ETL pipelines using AWS Glue and PySpark.
-- Implemented AWS Glue Workflow orchestration with conditional triggers.
-- Executed Gold layer aggregations in parallel.
-- Implemented automated Data Quality validation with fail-fast pipeline controls.
-- Exposed curated datasets through Athena and Power BI.
-- Implemented event-driven monitoring using Amazon EventBridge.
-- Configured automated failure notifications through Amazon SNS email alerts.
-- Implemented a reusable Python framework for AWS Glue jobs.
-
----
+- [Project status and roadmap](docs/project-status.md)
+- [Project overview](docs/project_overview.md)
+- [Data source and Raw mapping](docs/data-source.md)
+- [Silver data contracts](docs/silver-data-contracts.md)
+- [Gold data contracts](docs/gold-data-contracts.md)
+- [Logical data model](docs/data_model/logical_model.md)
+- [Local PySpark testing](docs/testing-guide.md)
+- [Manual AWS deployment guide](docs/deployment-guide.md)
+- [Final deployment order](docs/deployments/final-deployment-order.md)
+- [Repository review](docs/repository-review.md)
+- [Change history](CHANGELOG.md)
 
 ## Architecture
 
-![Architecture](docs/architecture/architecture.png)
-
-### Data Flow
+![AWS Retail Data Platform architecture](docs/architecture/architecture.png)
 
 ```text
-CSV Files
-    ↓
-Amazon S3 (Raw Layer)
-    ↓
-AWS Glue ETL
-    ↓
-Silver Layer (Parquet)
-    ↓
-AWS Glue Workflow
-    ↓
-Gold Aggregations (Parallel Processing)
-    ↓
-Data Quality Validation
-    ↓
-AWS Glue Data Catalog
-    ↓
-Amazon Athena
-    ↓
-Power BI Dashboard
+Olist CSV files
+    -> Amazon S3 Raw
+    -> AWS Glue Silver ETL
+       -> explicit schemas
+       -> table-level quality checks
+    -> Amazon S3 Silver (Parquet)
+    -> Silver referential-integrity job
+    -> AWS Glue Gold aggregations (parallel)
+    -> Amazon S3 Gold (Parquet)
+    -> Gold quality job
+    -> AWS Glue Data Catalog
+    -> Amazon Athena
+    -> Power BI
 ```
 
----
+The existing AWS environment also uses Glue Workflow conditional triggers, EventBridge failure events, CloudWatch logs, and SNS email notifications. Screenshots under `docs/screenshots/` provide deployment evidence. A Terraform module under `infra/terraform/` now defines the target infrastructure; importing or applying it in AWS remains pending.
 
-## Workflow Orchestration
-Implemented an enterprise-style AWS Glue Workflow to automate the complete data pipeline.
-```text
-Start Trigger
-    ↓
-Silver ETL Job
-    ↓
-Conditional Trigger
-    ↓
-Gold Layer Jobs (Parallel)
-      ├── Sales by State
-      ├── Sales by Category
-      ├── Sales by Payment Type
-      ├── Top Customers
-      └── Top Sellers
-    ↓
-ALL Success Trigger
-    ↓
-Data Quality Validation
-```
+## What this project demonstrates
 
-![AWS Glue Workflow](docs/screenshots/workflow.png)
+- Layered Raw, Silver, and Gold data design.
+- Reusable AWS Glue/PySpark jobs and shared Python packaging.
+- Explicit source schemas instead of runtime inference.
+- Fail-fast required-field, uniqueness, domain, range, and non-negative checks.
+- Cross-table referential-integrity validation with persistent audit output.
+- Backward-compatible Gold metrics plus explicit delivered-order metrics.
+- Parallel Gold processing through AWS Glue Workflow.
+- Athena reconciliation queries and Power BI consumption.
+- Event-driven failure monitoring through EventBridge and SNS.
+- Docker-based automated PySpark tests without AWS credentials.
 
----
+## Data layers
 
-## Reusable Framework
+### Raw
 
-To improve maintainability and reduce code duplication, a shared Python library was implemented and deployed as a Glue dependency.
+Raw preserves the publisher's CSV files unchanged. The source data is not committed to Git.
 
-The library is packaged as:
+Registered datasets:
 
-```text
-scripts/libs/common.zip
-```
+- `customers`
+- `orders`
+- `order_items`
+- `payments`
+- `products`
+- `sellers`
+- `geolocation`
+- `reviews`
+- `product_category_translation`
 
-Containing:
+The current analytical workflow primarily consumes the first six datasets.
+
+### Silver
+
+The generic Silver job accepts a registered `TABLE_NAME`, reads the corresponding Raw prefix, applies its explicit schema, normalizes strings, executes table-level quality rules, and writes Parquet.
+
+Important design choices:
+
+- ZIP-code prefixes remain strings so leading zeroes are preserved.
+- Financial values use `decimal(12,2)`.
+- Timestamps use `yyyy-MM-dd HH:mm:ss`.
+- Quoted multiline review comments are supported.
+- Unknown table names, malformed values, bad headers, empty tables, invalid domains, and duplicate business keys fail the job.
+- A separate job checks five core parent-child relationships after all required Silver tables exist.
+
+See [Silver data contracts](docs/silver-data-contracts.md).
+
+### Gold
+
+All existing columns remain available for compatibility with Athena and Power BI. New metrics identify delivered-order semantics explicitly.
+
+| Dataset | Grain | Added analytical coverage |
+|---|---|---|
+| `sales_by_state` | customer state | delivered orders, items, product revenue, freight, average ticket |
+| `sales_by_category` | product category | delivered orders, items, revenue, freight, item average, ticket average |
+| `sales_by_payment_type` | payment type | payment records, delivered orders, payment value, record/order averages |
+| `top_customers` | customer unique ID and state | delivered payment value, order average, first/last purchase |
+| `top_sellers` | seller and state | delivered volume, revenue, freight, averages, first/last sale |
+
+The legacy `total_sales` field is intentionally retained. Its historical meaning differs between item-based and payment-based datasets; new fields such as `delivered_product_revenue` and `delivered_payment_value` remove that ambiguity.
+
+See [Gold data contracts](docs/gold-data-contracts.md).
+
+## Data quality
+
+Silver table-level rules are centralized in `scripts/common/quality_rules.py` and executed before overwrite. Referential results are appended under the Silver quality-log prefix and fail the job when orphan records exist.
+
+Gold validation checks:
+
+- Non-empty outputs.
+- Required dimensions.
+- Non-negative counts and financial metrics.
+- Delivered counts not exceeding legacy totals.
+- Valid first/last activity ranges.
+
+Athena reconciliation queries are available in `sql/queries.sql`.
+
+## Reusable Glue package
+
+Shared code is packaged as `libs/common.zip`:
 
 ```text
 common/
-├── config.py
-├── logger.py
-└── utils.py
+|-- __init__.py
+|-- config.py
+|-- data_quality.py
+|-- gold_transformations.py
+|-- logger.py
+|-- quality_rules.py
+|-- schemas.py
+|-- silver_transformations.py
+`-- utils.py
 ```
 
-### Configuration Management
+Rebuild and verify it with:
 
-Centralized configuration is stored in `config.py`:
-
-```python
-BUCKET_NAME = "olist-data-engineering-otto"
-
-RAW_BASE_PATH = f"s3://{BUCKET_NAME}/raw"
-SILVER_BASE_PATH = f"s3://{BUCKET_NAME}/silver"
-GOLD_BASE_PATH = f"s3://{BUCKET_NAME}/gold"
-
-RAW_DATABASE = "olist_raw_db"
-SILVER_DATABASE = "olist_silver_db"
-GOLD_DATABASE = "olist_gold_db"
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_common_zip.ps1
 ```
 
-This allows all ETL jobs to use a single source of configuration, making updates easier and reducing the risk of inconsistencies across jobs.
+The builder emits Linux-compatible ZIP paths required by AWS Glue.
 
-### Centralized Logging
+## Local tests
 
-A reusable logger was implemented:
+Docker is the only local runtime prerequisite:
 
-```python
-logger = get_logger(args["JOB_NAME"])
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run_tests.ps1
 ```
 
-This standardizes logging across all Glue jobs and simplifies troubleshooting and monitoring.
+The pinned Apache Spark 3.5.4 suite currently contains 10 tests covering schemas, Silver normalization, quality failures, referential integrity, and all five Gold transformations. The latest verification completed with 10/10 tests passing.
 
-### Shared Utilities
+## AWS services and tools
 
-Common utility functions were created to encapsulate repetitive tasks:
+| Service or tool | Purpose |
+|---|---|
+| Amazon S3 | Raw, Silver, Gold, and quality-audit storage |
+| AWS Glue ETL | PySpark processing |
+| AWS Glue Workflow | Conditional orchestration and parallel Gold execution |
+| AWS Glue Crawlers and Data Catalog | Metadata discovery and table definitions |
+| Amazon Athena | SQL validation and analytics |
+| Amazon CloudWatch | Glue execution logs |
+| Amazon EventBridge | Glue failure-event routing |
+| Amazon SNS | Email failure notifications |
+| IAM | Access control |
+| Power BI | Dashboard and reporting |
+| Docker | Isolated local Spark tests |
+| Terraform | Reproducible AWS infrastructure definition |
 
-- DataFrame row count logging
-- Standardized Parquet writing
-- Reusable helper functions
+## Dashboard
 
-Example:
+The editable dashboard is stored at `powerbi/olist_dashboard.pbix`.
 
-```python
-log_dataframe_count(df, logger, "sales_by_state")
+![Power BI dashboard](docs/screenshots/dashboard.PNG)
 
-write_parquet(
-    df,
-    output_path,
-    mode="overwrite",
-    partitions=1
-)
-```
-
-### Benefits
-
-- Reduced code duplication
-- Easier maintenance
-- Consistent logging across ETL jobs
-- Centralized configuration management
-- Improved code readability
-- Reusable ETL framework for future pipelines
-
----
-
-## AWS Services Used
-
-| Service | Purpose |
-|----------|----------|
-| Amazon S3 | Data Lake Storage |
-| AWS Glue ETL | Data Processing |
-| AWS Glue Workflow | Pipeline Orchestration |
-| AWS Glue Crawlers | Metadata Discovery |
-| AWS Glue Catalog | Metadata Management |
-| Amazon Athena | Serverless Analytics |
-| Amazon CloudWatch | Monitoring & Logging |
-| IAM | Security and Access Control |
-| Power BI | Reporting & Visualization |
-
----
-
-## Technologies
-
-- Python
-- PySpark
-- SQL
-- Parquet
-- Amazon S3
-- AWS Glue
-- AWS Athena
-- Power BI
-- GitHub
-
----
-
-## Data Layers
-
-### Raw Layer
-
-Stores original source files.
-
-Datasets:
-
-- customers
-- orders
-- order_items
-- products
-- payments
-- sellers
-
-Storage:
+## Repository structure
 
 ```text
-s3://olist-data-engineering-otto/raw/
+.
+|-- data/                    # ignored local source data and layer placeholders
+|-- docs/
+|   |-- architecture/
+|   |-- data_model/
+|   |-- deployments/
+|   `-- screenshots/
+|-- libs/
+|   `-- common.zip
+|-- infra/
+|   `-- terraform/
+|-- powerbi/
+|   `-- olist_dashboard.pbix
+|-- scripts/
+|   |-- common/
+|   |-- gold/
+|   |-- quality/
+|   `-- silver/
+|-- sql/
+|   `-- queries.sql
+|-- tests/
+|-- CHANGELOG.md
+|-- LICENSE
+`-- README.md
 ```
 
----
+## Deployment state
 
-### Silver Layer
+The Terraform module is implemented and locally validated, but it has not yet been reconciled with the existing manually managed AWS resources. Local changes are not considered deployed until Terraform state/import decisions and AWS runtime evidence are recorded in `docs/project-status.md`.
 
-Standardized and cleansed datasets.
-
-Main transformations:
-
-- Data type standardization
-- Null handling
-- Data quality validation
-- Column normalization
-- Parquet optimization
-
-Storage:
-
-```text
-s3://olist-data-engineering-otto/silver/
-```
-
----
-
-### Gold Layer
-
-Business-oriented aggregated datasets optimized for analytics.
-
-#### sales_by_state
-
-Sales metrics aggregated by customer state.
-
-Columns:
-
-- customer_state
-- total_orders
-- total_items
-- total_sales
-- total_freight
-- avg_ticket
-
----
-
-#### sales_by_category
-
-Sales metrics aggregated by product category.
-
-Columns:
-
-- product_category_name
-- total_orders
-- total_items
-- total_sales
-- avg_price
-
----
-
-#### sales_by_payment_type
-
-Sales metrics aggregated by payment method.
-
-Columns:
-
-- payment_type
-- total_orders
-- total_sales
-- avg_payment_value
-
----
-
-#### top_sellers
-
-Top performing sellers.
-
-Columns:
-
-- seller_id
-- seller_state
-- total_orders
-- total_items
-- total_sales
-
----
-
-#### top_customers
-
-Top customers by revenue.
-
-Columns:
-
-- customer_unique_id
-- customer_state
-- total_orders
-- total_sales
-- avg_ticket
-
-Storage:
-
-```text
-s3://olist-data-engineering-otto/gold/
-```
-
----
-
-## Athena Queries
-
-Athena is used as the analytical query layer.
-
-Example:
-
-SQL 
-
-![Athena Analytics](docs/screenshots/athena_queries.png)
-
-Example query:
-
-```sql
-SELECT *
-FROM sales_by_state
-ORDER BY total_sales DESC;
-```
-
-Query scripts:
-
-```text
-sql/queries.sql
-```
-
----
-
-## Power BI Dashboard
-
-The Gold layer datasets are consumed by Power BI for reporting and visualization.
-
-Examples:
-
-- Sales by State
-- Sales by Category
-- Sales by Payment Type
-- Top Sellers
-- Top Customers
-
-
-![Dashboard](docs/screenshots/dashboard.PNG)
-
----
-
-## Project Structure
-
-```text
-aws-retail-data-platform
-│
-├── docs
-│   ├── architecture
-│   │   └── architecture.png
-│   └── project_overview.md
-│
-├── scripts
-│   ├── common
-│   │	├──	config.py
-│   │	├──	logger.py
-│   │	└── utils.py
-│	│
-│   ├── silver
-│   └── gold
-│
-├── libs
-│   └── common.zip
-│
-├── sql
-│   └── queries.sql
-│
-├── powerbi
-│   └── dashboard.pbix
-│
-└── README.md
-```
-
----
-
-## Key Data Engineering Concepts Demonstrated
-
-- Data Lake Architecture
-- Lakehouse Architecture
-- ETL Pipelines
-- PySpark Transformations
-- Data Quality Validation
-- Data Aggregation
-- Parquet Optimization
-- AWS Glue Catalog
-- Athena Analytics
-- Business Metrics Modeling
-
----
-
-## Features
-
-- AWS Glue Workflow orchestration
-- Conditional event-based triggers
-- Parallel execution of Gold aggregations
-- Automated Data Quality validation
-- AWS Glue Crawlers and Data Catalog integration
-- Athena query layer for serverless analytics
-- End-to-end pipeline automation
-- Fail-fast validation strategy
-- Enterprise ETL design pattern
-- EventBridge monitoring for Glue job failures
-- Automated SNS email notifications
-
----
-
-## Data Quality Controls
-
-Automated validation layer implemented using AWS Glue and PySpark.
-
-### Validation Rules
-
-| Dataset | Validation |
-|----------|------------|
-| sales_by_state | customer_state NOT NULL |
-| sales_by_payment_type | payment_type NOT NULL |
-| sales_by_category | product_category_name NOT NULL |
-| top_customers | customer_unique_id NOT NULL |
-| top_sellers | seller_id NOT NULL |
-
-Pipeline execution fails automatically when a validation rule is violated.
-
-### Failure Monitoring and Alerting
-
-The platform includes event-driven monitoring using Amazon EventBridge and Amazon SNS.
-
-When the Data Quality job fails, EventBridge captures the Glue Job State Change event and automatically triggers an SNS email notification.
-
-```text
-Glue Data Quality Job
-    ↓
-FAILED
-    ↓
-Amazon EventBridge
-    ↓
-Amazon SNS
-    ↓
-Email Notification
-```
-![Data Quality Job Failure](docs/screenshots/job_fail.png)
-
-![EventBridge SNS Notification](docs/screenshots/mail_fail.png)
-
-The monitoring rule is implemented using Amazon EventBridge and listens for FAILED state changes on the Data Quality Glue job.
-
-Event Pattern:
-
-```json
-{
-  "source": ["aws.glue"],
-  "detail-type": ["Glue Job State Change"],
-  "detail": {
-    "jobName": ["olist-data-quality-gold-job"],
-    "state": ["FAILED"]
-  }
-}
-```
-
----
-
-## Future Improvements
-
-- CloudWatch Alerts
-- SNS Notifications
-- Infrastructure as Code (Terraform)
-- GitHub Actions CI/CD
-- AWS Step Functions orchestration
-
----
+Use the [final deployment order](docs/deployments/final-deployment-order.md) rather than deploying individual files ad hoc.
 
 ## Dataset
 
-- Brazilian E-Commerce Public Dataset by Olist (Kaggle)
+Brazilian E-Commerce Public Dataset by Olist: <https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce>
 
-Source:
+## Roadmap
 
-https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce
-
----
+- Consolidated manual AWS validation.
+- Import or deploy the Terraform-defined infrastructure in AWS.
+- CI/CD for syntax, package, and PySpark tests.
+- Optional Apache Iceberg evaluation if ACID table capabilities are required.
 
 ## Author
 
@@ -506,4 +228,8 @@ Otto Yhoda Alvarez Devars
 
 Senior Data Engineer | Data Governance | PySpark | AWS | Azure | Snowflake
 
-GitHub: https://github.com/yhodiux
+<https://github.com/yhodiux>
+
+## License
+
+See [LICENSE](LICENSE).

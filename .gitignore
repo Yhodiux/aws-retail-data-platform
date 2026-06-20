@@ -1,0 +1,17 @@
+# Local Olist source data
+/archive/
+/archive.zip
+/data/raw/*
+!/data/raw/.gitkeep
+olist_*.csv
+product_category_name_translation.csv
+
+# Python-generated files
+__pycache__/
+*.py[cod]
+
+# Local tooling
+.pytest_cache/
+.idea/
+.vscode/
+
