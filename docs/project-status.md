@@ -137,3 +137,24 @@ Remaining validation:
 - Execute Athena reconciliation queries.
 - Refresh and validate Power BI.
 - Keep the legacy bucket unchanged until all downstream checks pass.
+
+## Restart checkpoint — 2026-06-20
+
+Safe shutdown state:
+
+- AWS deployment and end-to-end workflow validation are complete.
+- Terraform reports no drift and uses remote state in the new versioned bucket.
+- No AWS resource deletion is pending.
+- The legacy bucket `olist-data-engineering-otto` remains intact as rollback evidence.
+- The active data bucket is `olist-retail-data-dev-us-east-1-793a6f`.
+- Local branch `main` contains deployment commits `14dcc0d` and `ff595b8` ahead of `origin/main`.
+- Saved `.tfplan` files are local/ignored and must not be reused after future state changes; generate a fresh plan.
+
+After restarting:
+
+1. Recreate the temporary MFA session with `aws configure mfa-login --profile default --update-profile terraform-mfa --serial-number arn:aws:iam::746552104319:mfa/UserYhodiux --duration-seconds 43200`.
+2. Run `terraform plan` and require no drift before further AWS work.
+3. Deploy and run the Silver referential-integrity job.
+4. Execute Athena reconciliation queries.
+5. Validate the Power BI refresh.
+6. Retire the legacy bucket only after all downstream checks pass.
