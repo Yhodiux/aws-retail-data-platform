@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-06-19
+Last updated: 2026-06-26
 
 ## Current state
 
@@ -15,6 +15,8 @@ The current pipeline implements:
 - Athena consumption and a Power BI dashboard.
 - EventBridge and SNS failure notifications documented with screenshots.
 
+The repository also contains an in-progress Analytics API under `functions/analytics_api/`. This API layer is not deployed yet. It currently provides the foundation for generating Athena SQL, executing Athena queries through `boto3`, and retrieving results from the configured Athena output location.
+
 Terraform now defines S3, IAM, Glue jobs, crawlers, workflow triggers, Data Catalog databases, EventBridge, and SNS. It validates locally but has not been imported or applied, so the deployed AWS state is not yet reconciled with Terraform state.
 
 ## Active phase
@@ -26,6 +28,7 @@ Status: implemented and validated locally; AWS import/plan pending
 Phase 1 Gold status: local implementation complete; runtime and AWS validation deferred.
 Phase 2 Silver status: local implementation and full-source validation complete; AWS runtime validation deferred.
 Phase 3 testing status: 10/10 Docker-based PySpark tests passing.
+Analytics API status: local foundation started; Lambda deployment pending.
 
 Objective: make the AWS platform reproducible while preserving the existing manually deployed environment through explicit imports and reviewed plans.
 
@@ -51,6 +54,57 @@ Phase 1 confirmed business rules:
 - New metric names must identify the underlying business value instead of using another generic sales alias.
 - Non-delivered orders remain represented by the legacy metrics for backward compatibility and may receive explicit operational metrics later.
 
+### Phase 6 - Analytics API foundation
+
+Status: local foundation started; Lambda deployment pending
+
+During this phase, a new Analytics API structure was created under `functions/analytics_api/`.
+
+Implemented structure:
+
+- `repositories/`
+- `services/`
+- `tests/`
+- `utils/`
+- `examples/`
+- `handler.py`
+- `config.py`
+- `requirements.txt`
+
+The API follows a `Repository -> Service -> Handler` pattern:
+
+- Repository classes generate SQL only.
+- Service classes communicate with AWS services.
+- The Lambda handler remains a thin entry point and is still in construction.
+
+Current components:
+
+- `AthenaQueries.sales_by_state()` builds the SQL for `sales_by_state`.
+- `AthenaService.execute_query()` starts Athena query execution.
+- `AthenaService.wait_for_completion()` waits for terminal Athena states.
+- `AthenaService.get_results()` retrieves Athena result rows.
+- `AthenaService.run_query()` orchestrates execution, waiting, and result retrieval.
+
+Testing added:
+
+- Unit test: `functions/analytics_api/tests/repositories/test_athena_queries.py`.
+- Integration test: `functions/analytics_api/tests/services/test_athena_service.py`.
+
+The integration test validates the path from Python to `boto3`, Amazon Athena, the AWS Glue Data Catalog, S3 Gold data, and query results. It has been executed successfully in the current development environment.
+
+Local example:
+
+- `functions/analytics_api/examples/run_sales_by_state.py`.
+
+Architecture decisions:
+
+- Separate Repository and Service responsibilities.
+- Keep SQL isolated from consumers.
+- Use `pytest` for Analytics API tests.
+- Separate unit tests from integration tests.
+- Build the API architecture before deployment.
+- Keep the Lambda handler thin and free of business logic.
+
 ## Roadmap
 
 | Phase | Scope | Status |
@@ -61,8 +115,9 @@ Phase 1 confirmed business rules:
 | 3 | Local PySpark tests | Completed |
 | 4 | Documentation consolidation | Completed |
 | 5 | Terraform infrastructure | Local complete; AWS import/apply pending |
-| 6 | CI/CD | Not started |
-| 7 | Optional Apache Iceberg evaluation | Backlog |
+| 6 | Analytics API foundation | Local foundation started; deployment pending |
+| 7 | CI/CD | Not started |
+| 8 | Optional Apache Iceberg evaluation | Backlog |
 
 ## Working agreement
 
@@ -72,10 +127,13 @@ Phase 1 confirmed business rules:
 - AWS deployment is deferred to a final consolidated phase and must follow `docs/deployment-guide.md`.
 - A local code change is not considered deployed until its AWS validation is recorded here.
 - Completed repository changes are recorded in `CHANGELOG.md`.
+- The Analytics API remains part of this repository only at this stage; it is not documented as an ALCAZ component.
 
 ## Current blockers
 
 No local implementation blocker. AWS account access and the actual Region/resource names are required before importing the existing environment and reviewing a real plan.
+
+For the Analytics API, deployment is intentionally pending until the service-level business methods, Lambda handler, API Gateway integration, and Terraform automation are completed.
 
 ## Current checkpoint — 2026-06-19
 
@@ -112,6 +170,14 @@ Pending work:
 3. Review a real Terraform plan and resolve any drift before applying changes.
 4. Review and commit the resulting local release.
 5. Publish the repository and execute the documented AWS deployment when ready.
+
+Analytics API roadmap:
+
+1. Complete `AthenaService` with business methods such as `sales_by_state`, `top_customers`, `top_sellers`, `sales_by_category`, and `sales_by_payment_type`.
+2. Implement the Lambda handler.
+3. Integrate API Gateway.
+4. Automate deployment through Terraform.
+5. Incorporate final technical documentation and diagrams.
 
 Resume point: complete Athena reconciliation, deploy/run Silver referential validation, validate Power BI refresh, and retire the legacy bucket only after downstream sign-off.
 

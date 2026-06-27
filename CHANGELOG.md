@@ -30,6 +30,7 @@ All notable repository changes will be documented in this file. AWS deployment s
 - Git attributes for consistent text line endings and binary artifact handling.
 - Repeatable repository validator for Python syntax, Markdown links, package contents, and source-data exclusion.
 - Terraform infrastructure for S3, IAM, Glue jobs, crawlers, workflow orchestration, Data Catalog, EventBridge, and SNS.
+- In-progress Lambda Analytics API documentation covering the Repository -> Service -> Handler pattern, Athena query generation, Athena service integration, pytest coverage, local example execution, and deployment roadmap.
 
 ### Changed
 
@@ -63,3 +64,4 @@ All notable repository changes will be documented in this file. AWS deployment s
 - Parameterized Glue bucket, database, and environment configuration through job arguments with backward-compatible defaults.
 - Migrated the AWS pipeline to a non-personal, versioned S3 bucket and reconciled existing resources into Terraform state.
 - Added least-privilege Glue access to the new bucket and completed isolated Silver/Gold, crawler, Gold-quality, and end-to-end workflow validation in AWS.
+- Documented the current Analytics API status as local foundation only: not deployed, not connected to API Gateway, and not part of ALCAZ at this stage.

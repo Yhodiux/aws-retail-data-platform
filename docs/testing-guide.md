@@ -2,6 +2,8 @@
 
 The project runs automated PySpark tests in Docker so Java, Python, and Spark do not need to be installed globally.
 
+The in-progress Analytics API uses `pytest` for repository and Athena service validation.
+
 ## Prerequisite
 
 - Docker Desktop or another active Docker Engine.
@@ -46,6 +48,23 @@ The suite in `tests/test_pyspark_pipeline.py` verifies:
 - Payment-record versus distinct-order semantics.
 - Delivered customer and seller activity timestamps.
 
+## Analytics API tests
+
+Analytics API tests live under:
+
+```text
+functions/analytics_api/tests/
+```
+
+Current coverage:
+
+| Test type | Location | Purpose | AWS required |
+|---|---|---|---|
+| Unit | `tests/repositories/test_athena_queries.py` | Validate SQL generation in `AthenaQueries`. | No |
+| Integration | `tests/services/test_athena_service.py` | Validate Python -> boto3 -> Athena -> Glue Catalog -> S3 Gold -> results. | Yes |
+
+The integration test has been executed successfully in the current development environment. It depends on valid AWS configuration, an accessible Athena database, the Glue Data Catalog, S3 Gold data, and an Athena query-result location.
+
 ## Architecture for testability
 
 Glue scripts retain environment-specific responsibilities such as job arguments, S3 reads and writes, logging, and commits. Reusable DataFrame logic lives in the shared package:
@@ -60,3 +79,5 @@ The local tests call these same functions directly with small deterministic Data
 ## Baseline
 
 On 2026-06-19, all 10 tests passed with Apache Spark 3.5.4. The final verification run completed in approximately 16 seconds after Spark startup.
+
+Analytics API pytest coverage was added after this PySpark baseline and is tracked separately because the service integration test consumes AWS resources.

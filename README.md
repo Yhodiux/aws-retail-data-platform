@@ -3,6 +3,8 @@
 Portfolio project demonstrating an end-to-end AWS analytics data platform for the public Olist Brazilian ecommerce dataset. It uses a medallion-style data lake on Amazon S3, AWS Glue and PySpark transformations, automated data-quality controls, Athena, and Power BI.
 
 > Repository status: Gold enhancements, explicit Silver schemas, stronger quality controls, and local tests are complete locally. Their consolidated AWS deployment is intentionally deferred. See [project status](docs/project-status.md).
+>
+> Analytics API status: an AWS Lambda-based API layer is being built under `functions/analytics_api/`. It can generate and execute Athena queries locally, but it is not deployed yet.
 
 ## Documentation
 
@@ -12,6 +14,7 @@ Portfolio project demonstrating an end-to-end AWS analytics data platform for th
 - [Silver data contracts](docs/silver-data-contracts.md)
 - [Gold data contracts](docs/gold-data-contracts.md)
 - [Logical data model](docs/data_model/logical_model.md)
+- [Analytics API](docs/analytics-api.md)
 - [Local PySpark testing](docs/testing-guide.md)
 - [Manual AWS deployment guide](docs/deployment-guide.md)
 - [Final deployment order](docs/deployments/final-deployment-order.md)
@@ -35,6 +38,7 @@ Olist CSV files
     -> Gold quality job
     -> AWS Glue Data Catalog
     -> Amazon Athena
+    -> Analytics API (in progress)
     -> Power BI
 ```
 
@@ -50,6 +54,7 @@ The existing AWS environment also uses Glue Workflow conditional triggers, Event
 - Backward-compatible Gold metrics plus explicit delivered-order metrics.
 - Parallel Gold processing through AWS Glue Workflow.
 - Athena reconciliation queries and Power BI consumption.
+- Lambda-oriented Analytics API foundation using a Repository -> Service -> Handler pattern.
 - Event-driven failure monitoring through EventBridge and SNS.
 - Docker-based automated PySpark tests without AWS credentials.
 
@@ -153,6 +158,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run_tests.ps1
 
 The pinned Apache Spark 3.5.4 suite currently contains 10 tests covering schemas, Silver normalization, quality failures, referential integrity, and all five Gold transformations. The latest verification completed with 10/10 tests passing.
 
+The in-progress Analytics API also includes `pytest` tests under `functions/analytics_api/tests/`:
+
+- Repository unit tests validate SQL generation without AWS access.
+- Service integration tests validate Python -> boto3 -> Athena -> Glue Catalog -> S3 Gold -> results.
+
 ## AWS services and tools
 
 | Service or tool | Purpose |
@@ -162,6 +172,8 @@ The pinned Apache Spark 3.5.4 suite currently contains 10 tests covering schemas
 | AWS Glue Workflow | Conditional orchestration and parallel Gold execution |
 | AWS Glue Crawlers and Data Catalog | Metadata discovery and table definitions |
 | Amazon Athena | SQL validation and analytics |
+| AWS Lambda | In-progress Analytics API runtime |
+| API Gateway | Planned HTTP entry point for the Analytics API |
 | Amazon CloudWatch | Glue execution logs |
 | Amazon EventBridge | Glue failure-event routing |
 | Amazon SNS | Email failure notifications |
@@ -188,6 +200,8 @@ The editable dashboard is stored at `powerbi/olist_dashboard.pbix`.
 |   `-- screenshots/
 |-- libs/
 |   `-- common.zip
+|-- functions/
+|   `-- analytics_api/
 |-- infra/
 |   `-- terraform/
 |-- powerbi/
@@ -220,6 +234,7 @@ Brazilian E-Commerce Public Dataset by Olist: <https://www.kaggle.com/datasets/o
 - Consolidated manual AWS validation.
 - Import or deploy the Terraform-defined infrastructure in AWS.
 - CI/CD for syntax, package, and PySpark tests.
+- Complete and deploy the Lambda-based Analytics API.
 - Optional Apache Iceberg evaluation if ACID table capabilities are required.
 
 ## Author
