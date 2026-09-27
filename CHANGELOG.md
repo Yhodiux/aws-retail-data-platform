@@ -31,6 +31,10 @@ All notable repository changes will be documented in this file. AWS deployment s
 - Repeatable repository validator for Python syntax, Markdown links, package contents, and source-data exclusion.
 - Terraform infrastructure for S3, IAM, Glue jobs, crawlers, workflow orchestration, Data Catalog, EventBridge, and SNS.
 - In-progress Lambda Analytics API documentation covering the Repository -> Service -> Handler pattern, Athena query generation, Athena service integration, pytest coverage, local example execution, and deployment roadmap.
+- Terraform-managed IAM role and least-privilege access policy for the Analytics Lambda.
+- Terraform-managed deployment of `olist-analytics-api-dev` using the Python 3.13 Lambda runtime.
+- Terraform Archive provider packaging for the Analytics API Lambda artifact.
+- Successful AWS Lambda invocation validating the Analytics API end to end against Athena and `olist_gold_db`.
 
 ### Changed
 
@@ -64,4 +68,6 @@ All notable repository changes will be documented in this file. AWS deployment s
 - Parameterized Glue bucket, database, and environment configuration through job arguments with backward-compatible defaults.
 - Migrated the AWS pipeline to a non-personal, versioned S3 bucket and reconciled existing resources into Terraform state.
 - Added least-privilege Glue access to the new bucket and completed isolated Silver/Gold, crawler, Gold-quality, and end-to-end workflow validation in AWS.
-- Documented the current Analytics API status as local foundation only: not deployed, not connected to API Gateway, and not part of ALCAZ at this stage.
+- Promoted the Analytics API from a local-only foundation to a deployed AWS Lambda implementation.
+- Validated the deployed `sales_by_state` path end to end: Lambda -> Athena -> `olist_gold_db` -> S3 query results -> JSON response.
+- Renamed the serverless source directory from `lambda` to `functions` to avoid naming ambiguity and aligned the implementation and documentation with the new structure.
