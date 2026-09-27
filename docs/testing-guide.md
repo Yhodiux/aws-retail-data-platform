@@ -2,7 +2,7 @@
 
 The project runs automated PySpark tests in Docker so Java, Python, and Spark do not need to be installed globally.
 
-The in-progress Analytics API uses `pytest` for repository and Athena service validation.
+The Analytics API uses `pytest` for repository, Athena service, and Lambda handler validation.
 
 ## Prerequisite
 
@@ -62,8 +62,13 @@ Current coverage:
 |---|---|---|---|
 | Unit | `tests/repositories/test_athena_queries.py` | Validate SQL generation in `AthenaQueries`. | No |
 | Integration | `tests/services/test_athena_service.py` | Validate Python -> boto3 -> Athena -> Glue Catalog -> S3 Gold -> results. | Yes |
+| Handler | `tests/handler/test_handler.py` | Validate the Lambda entry point and HTTP-style JSON response. | No |
+
+The current Analytics API test suite passes 3/3 tests.
 
 The integration test has been executed successfully in the current development environment. It depends on valid AWS configuration, an accessible Athena database, the Glue Data Catalog, S3 Gold data, and an Athena query-result location.
+
+In addition to the local pytest coverage, the deployed `olist-analytics-api-dev` Lambda has been invoked successfully in AWS, validating the runtime path from Lambda through Athena and `olist_gold_db` to a JSON response.
 
 ## Architecture for testability
 
@@ -81,3 +86,5 @@ The local tests call these same functions directly with small deterministic Data
 On 2026-06-19, all 10 tests passed with Apache Spark 3.5.4. The final verification run completed in approximately 16 seconds after Spark startup.
 
 Analytics API pytest coverage was added after this PySpark baseline and is tracked separately because the service integration test consumes AWS resources.
+
+As of 2026-09-27, the Analytics API pytest suite passes 3/3 tests and the deployed Lambda has completed a successful end-to-end AWS invocation.

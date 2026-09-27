@@ -15,20 +15,20 @@ The current pipeline implements:
 - Athena consumption and a Power BI dashboard.
 - EventBridge and SNS failure notifications documented with screenshots.
 
-The repository also contains an in-progress Analytics API under `functions/analytics_api/`. This API layer is not deployed yet. It currently provides the foundation for generating Athena SQL, executing Athena queries through `boto3`, and retrieving results from the configured Athena output location.
+The repository also contains a deployed Analytics API under `functions/analytics_api/`. The current implementation provides SQL generation, Athena integration through `boto3`, result retrieval, a thin Lambda handler, automated pytest coverage, and a Terraform-managed AWS Lambda deployment. The deployed `sales_by_state` path has been validated end to end against `olist_gold_db`.
 
-Terraform now defines S3, IAM, Glue jobs, crawlers, workflow triggers, Data Catalog databases, EventBridge, and SNS. It validates locally but has not been imported or applied, so the deployed AWS state is not yet reconciled with Terraform state.
+Terraform manages the active AWS platform, including S3, IAM, Glue jobs, crawlers, workflow triggers, Data Catalog databases, EventBridge, SNS, and the Analytics Lambda infrastructure. The core data platform was reconciled and validated in AWS during the June deployment, and the Analytics Lambda IAM and runtime resources were added in September.
 
 ## Active phase
 
-### Phase 5 — Terraform infrastructure
+### Phase 5 — Analytics API
 
-Status: implemented and validated locally; AWS import/plan pending
+Status: Lambda foundation deployed and validated; multi-query routing and API Gateway pending
 
 Phase 1 Gold status: local implementation complete; runtime and AWS validation deferred.
 Phase 2 Silver status: local implementation and full-source validation complete; AWS runtime validation deferred.
 Phase 3 testing status: 10/10 Docker-based PySpark tests passing.
-Analytics API status: local foundation started; Lambda deployment pending.
+Analytics API status: Lambda deployed and validated end to end for `sales_by_state`; multi-query routing and API Gateway pending.
 
 Objective: make the AWS platform reproducible while preserving the existing manually deployed environment through explicit imports and reviewed plans.
 
@@ -56,7 +56,7 @@ Phase 1 confirmed business rules:
 
 ### Phase 6 - Analytics API foundation
 
-Status: local foundation started; Lambda deployment pending
+- The Lambda handler is implemented as a thin entry point and delegates analytical work to the service layer.
 
 During this phase, a new Analytics API structure was created under `functions/analytics_api/`.
 
@@ -84,13 +84,20 @@ Current components:
 - `AthenaService.wait_for_completion()` waits for terminal Athena states.
 - `AthenaService.get_results()` retrieves Athena result rows.
 - `AthenaService.run_query()` orchestrates execution, waiting, and result retrieval.
+- `AthenaService.sales_by_state()` exposes the current business operation.
+- `handler.lambda_handler()` invokes the service and returns an HTTP-style JSON response.
+- `utils/response.py` centralizes response formatting.
 
 Testing added:
 
 - Unit test: `functions/analytics_api/tests/repositories/test_athena_queries.py`.
 - Integration test: `functions/analytics_api/tests/services/test_athena_service.py`.
+- Handler test: `functions/analytics_api/tests/handler/test_handler.py`.
+- Current Analytics API test suite: 3/3 tests passing.
 
 The integration test validates the path from Python to `boto3`, Amazon Athena, the AWS Glue Data Catalog, S3 Gold data, and query results. It has been executed successfully in the current development environment.
+
+The Analytics API has also been deployed as `olist-analytics-api-dev` using the Python 3.13 AWS Lambda runtime. A real AWS invocation successfully validated the path from Lambda through Athena and `olist_gold_db` to the JSON response.
 
 Local example:
 
@@ -114,8 +121,8 @@ Architecture decisions:
 | 2 | Explicit Silver schemas and stronger data quality | Local complete; runtime/AWS deferred |
 | 3 | Local PySpark tests | Completed |
 | 4 | Documentation consolidation | Completed |
-| 5 | Terraform infrastructure | Local complete; AWS import/apply pending |
-| 6 | Analytics API foundation | Local foundation started; deployment pending |
+| 5 | Terraform infrastructure | Deployed and validated in AWS |
+| 6 | Analytics API | Lambda foundation deployed; multi-query routing and API Gateway pending |
 | 7 | CI/CD | Not started |
 | 8 | Optional Apache Iceberg evaluation | Backlog |
 
@@ -131,9 +138,9 @@ Architecture decisions:
 
 ## Current blockers
 
-No local implementation blocker. AWS account access and the actual Region/resource names are required before importing the existing environment and reviewing a real plan.
+No current infrastructure blocker. AWS access, Terraform remote state, and the active `us-east-1` environment have been validated.
 
-For the Analytics API, deployment is intentionally pending until the service-level business methods, Lambda handler, API Gateway integration, and Terraform automation are completed.
+For the Analytics API, the next implementation work is application-level: add the remaining Gold analytical operations, implement multi-query handler routing, extend automated tests, redeploy the Lambda, and integrate API Gateway.
 
 ## Current checkpoint — 2026-06-19
 
@@ -224,3 +231,29 @@ After restarting:
 4. Execute Athena reconciliation queries.
 5. Validate the Power BI refresh.
 6. Retire the legacy bucket only after all downstream checks pass.
+
+## Analytics API deployment checkpoint — 2026-09-27
+
+Current state:
+
+- Analytics API source lives under `functions/analytics_api/`.
+- Repository -> Service -> Handler architecture is implemented for `sales_by_state`.
+- Repository, Service integration, and Handler tests pass: 3/3.
+- Terraform manages the Analytics Lambda IAM role and least-privilege access policy.
+- Terraform uses the HashiCorp Archive provider to package the Lambda artifact.
+- AWS Lambda `olist-analytics-api-dev` is deployed using Python 3.13.
+- Lambda configuration points to `olist_gold_db` and the Terraform-managed Athena result location.
+- A real AWS Lambda invocation completed successfully with `statusCode: 200`.
+- The deployed execution path Lambda -> Athena -> Gold -> JSON has been validated.
+- Terraform deployment completed without modifying or destroying existing platform resources.
+- Changes are committed and pushed to `main`.
+
+Next steps:
+
+1. Add Repository and Service support for the remaining Gold analytical datasets.
+2. Add handler routing for multiple analytical operations.
+3. Extend pytest coverage for the new operations and routes.
+4. Redeploy and validate every operation through AWS Lambda.
+5. Integrate API Gateway.
+6. Validate HTTP endpoints.
+7. Update final architecture and user-facing documentation.

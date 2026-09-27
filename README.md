@@ -2,9 +2,9 @@
 
 Portfolio project demonstrating an end-to-end AWS analytics data platform for the public Olist Brazilian ecommerce dataset. It uses a medallion-style data lake on Amazon S3, AWS Glue and PySpark transformations, automated data-quality controls, Athena, and Power BI.
 
-> Repository status: Gold enhancements, explicit Silver schemas, stronger quality controls, and local tests are complete locally. Their consolidated AWS deployment is intentionally deferred. See [project status](docs/project-status.md).
+> Repository status: the core AWS data platform is Terraform-managed and has been validated in AWS, including the Silver/Gold workflow, crawlers, Gold quality controls, and supporting infrastructure. See [project status](docs/project-status.md).
 >
-> Analytics API status: an AWS Lambda-based API layer is being built under `functions/analytics_api/`. It can generate and execute Athena queries locally, but it is not deployed yet.
+> Analytics API status: the API under `functions/analytics_api/` is deployed as the `olist-analytics-api-dev` AWS Lambda using Python 3.13. The current `sales_by_state` path has been validated end to end through Athena and `olist_gold_db`. Multi-query routing and API Gateway integration remain pending.
 
 ## Documentation
 
@@ -38,11 +38,12 @@ Olist CSV files
     -> Gold quality job
     -> AWS Glue Data Catalog
     -> Amazon Athena
-    -> Analytics API (in progress)
+    -> Analytics API
+		-> AWS Lambda
     -> Power BI
 ```
 
-The existing AWS environment also uses Glue Workflow conditional triggers, EventBridge failure events, CloudWatch logs, and SNS email notifications. Screenshots under `docs/screenshots/` provide deployment evidence. A Terraform module under `infra/terraform/` now defines the target infrastructure; importing or applying it in AWS remains pending.
+The AWS environment also uses Glue Workflow conditional triggers, EventBridge failure events, CloudWatch logs, and SNS email notifications. Screenshots under `docs/screenshots/` provide deployment evidence. Terraform under `infra/terraform/` manages the active AWS platform infrastructure and the Analytics Lambda deployment.
 
 ## What this project demonstrates
 
@@ -54,7 +55,7 @@ The existing AWS environment also uses Glue Workflow conditional triggers, Event
 - Backward-compatible Gold metrics plus explicit delivered-order metrics.
 - Parallel Gold processing through AWS Glue Workflow.
 - Athena reconciliation queries and Power BI consumption.
-- Lambda-oriented Analytics API foundation using a Repository -> Service -> Handler pattern.
+- Terraform-deployed AWS Lambda Analytics API using a Repository -> Service -> Handler pattern with Athena-backed analytical access.
 - Event-driven failure monitoring through EventBridge and SNS.
 - Docker-based automated PySpark tests without AWS credentials.
 
@@ -158,10 +159,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run_tests.ps1
 
 The pinned Apache Spark 3.5.4 suite currently contains 10 tests covering schemas, Silver normalization, quality failures, referential integrity, and all five Gold transformations. The latest verification completed with 10/10 tests passing.
 
-The in-progress Analytics API also includes `pytest` tests under `functions/analytics_api/tests/`:
+The Analytics API includes `pytest` tests under `functions/analytics_api/tests/`:
 
 - Repository unit tests validate SQL generation without AWS access.
 - Service integration tests validate Python -> boto3 -> Athena -> Glue Catalog -> S3 Gold -> results.
+- Handler tests validate the Lambda entry point and HTTP-style JSON response.
+
+The current Analytics API suite passes 3/3 tests. The deployed Lambda has also completed a successful end-to-end AWS invocation.
 
 ## AWS services and tools
 
@@ -172,7 +176,7 @@ The in-progress Analytics API also includes `pytest` tests under `functions/anal
 | AWS Glue Workflow | Conditional orchestration and parallel Gold execution |
 | AWS Glue Crawlers and Data Catalog | Metadata discovery and table definitions |
 | Amazon Athena | SQL validation and analytics |
-| AWS Lambda | In-progress Analytics API runtime |
+| AWS Lambda | Deployed Analytics API runtime |
 | API Gateway | Planned HTTP entry point for the Analytics API |
 | Amazon CloudWatch | Glue execution logs |
 | Amazon EventBridge | Glue failure-event routing |
@@ -221,7 +225,7 @@ The editable dashboard is stored at `powerbi/olist_dashboard.pbix`.
 
 ## Deployment state
 
-The Terraform module is implemented and locally validated, but it has not yet been reconciled with the existing manually managed AWS resources. Local changes are not considered deployed until Terraform state/import decisions and AWS runtime evidence are recorded in `docs/project-status.md`.
+The active AWS platform is managed through Terraform with remote state. Core infrastructure and the Glue workflow have been reconciled and validated in AWS. The Analytics Lambda IAM resources and `olist-analytics-api-dev` runtime are also Terraform-managed and deployed. AWS runtime evidence and current implementation status are recorded in `docs/project-status.md`.
 
 Use the [final deployment order](docs/deployments/final-deployment-order.md) rather than deploying individual files ad hoc.
 
@@ -231,10 +235,12 @@ Brazilian E-Commerce Public Dataset by Olist: <https://www.kaggle.com/datasets/o
 
 ## Roadmap
 
-- Consolidated manual AWS validation.
-- Import or deploy the Terraform-defined infrastructure in AWS.
-- CI/CD for syntax, package, and PySpark tests.
-- Complete and deploy the Lambda-based Analytics API.
+- Complete remaining downstream validation and Power BI refresh checks.
+- Extend the Analytics API to all five Gold analytical datasets.
+- Add multi-query routing to the Lambda handler.
+- Extend Analytics API automated test coverage.
+- Integrate API Gateway and validate HTTP endpoints.
+- Add CI/CD for syntax, package, PySpark, and Analytics API tests.
 - Optional Apache Iceberg evaluation if ACID table capabilities are required.
 
 ## Author
