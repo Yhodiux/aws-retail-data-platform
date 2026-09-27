@@ -4,7 +4,7 @@ Portfolio project demonstrating an end-to-end AWS analytics data platform for th
 
 > Repository status: the core AWS data platform is Terraform-managed and has been validated in AWS, including the Silver/Gold workflow, crawlers, Gold quality controls, and supporting infrastructure. See [project status](docs/project-status.md).
 >
-> Analytics API status: the API under `functions/analytics_api/` is deployed as the `olist-analytics-api-dev` AWS Lambda using Python 3.13. The current `sales_by_state` path has been validated end to end through Athena and `olist_gold_db`. Multi-query routing and API Gateway integration remain pending.
+> Analytics API status: the API under `functions/analytics_api/` is deployed as the `olist-analytics-api-dev` AWS Lambda using Python 3.13 and exposed through an Amazon API Gateway HTTP API. All five Gold analytical operations are implemented, covered by automated tests, and validated through the deployed Lambda. The HTTP path has also been validated end to end through API Gateway, Lambda, Athena, `olist_gold_db`, and S3 Gold data.
 
 ## Documentation
 
@@ -38,12 +38,114 @@ Olist CSV files
     -> Gold quality job
     -> AWS Glue Data Catalog
     -> Amazon Athena
-    -> Analytics API
-		-> AWS Lambda
+       -> Analytics API
+          -> AWS Lambda
+          -> Amazon API Gateway HTTP API
     -> Power BI
 ```
 
-The AWS environment also uses Glue Workflow conditional triggers, EventBridge failure events, CloudWatch logs, and SNS email notifications. Screenshots under `docs/screenshots/` provide deployment evidence. Terraform under `infra/terraform/` manages the active AWS platform infrastructure and the Analytics Lambda deployment.
+The AWS environment also uses Glue Workflow conditional triggers, EventBridge failure events, CloudWatch logs, and SNS email notifications. Screenshots under `docs/screenshots/` provide deployment evidence. Terraform under `infra/terraform/` manages the active AWS platform infrastructure ...and the Analytics API infrastructure, including AWS Lambda and Amazon API Gateway.
+
+### Data Pipeline & Orchestration
+
+The platform uses an AWS Glue workflow to coordinate the medallion pipeline, with explicit quality gates before analytical consumption.
+
+```mermaid
+flowchart TD
+    RAW["Amazon S3 Raw<br/>Olist CSV / JSON"]
+
+    SILVER["AWS Glue Silver ETL<br/>PySpark + explicit schemas"]
+    SILVER_S3["Amazon S3 Silver<br/>Cleaned & standardized Parquet"]
+    RI["Silver Referential Integrity<br/>Quality validation"]
+
+    G1["sales_by_state"]
+    G2["sales_by_category"]
+    G3["sales_by_payment_type"]
+    G4["top_customers"]
+    G5["top_sellers"]
+
+    GOLD_S3["Amazon S3 Gold<br/>Aggregated Parquet"]
+    GOLD_DQ["Gold Data Quality<br/>Business metric validation"]
+    CATALOG["AWS Glue Data Catalog"]
+    ATHENA["Amazon Athena"]
+
+    FAILURE["Job Failure"]
+    EVENTBRIDGE["Amazon EventBridge"]
+    SNS["Amazon SNS<br/>Email notification"]
+
+    RAW --> SILVER
+    SILVER --> SILVER_S3
+    SILVER_S3 --> RI
+
+    RI --> G1
+    RI --> G2
+    RI --> G3
+    RI --> G4
+    RI --> G5
+
+    G1 --> GOLD_S3
+    G2 --> GOLD_S3
+    G3 --> GOLD_S3
+    G4 --> GOLD_S3
+    G5 --> GOLD_S3
+
+    GOLD_S3 --> GOLD_DQ
+    GOLD_DQ --> CATALOG
+    CATALOG --> ATHENA
+
+    SILVER -. failure .-> FAILURE
+    RI -. failure .-> FAILURE
+    G1 -. failure .-> FAILURE
+    G2 -. failure .-> FAILURE
+    G3 -. failure .-> FAILURE
+    G4 -. failure .-> FAILURE
+    G5 -. failure .-> FAILURE
+    GOLD_DQ -. failure .-> FAILURE
+
+    FAILURE --> EVENTBRIDGE
+    EVENTBRIDGE --> SNS
+```
+
+The five Gold aggregation jobs execute independently after the Silver validation stage, allowing analytical datasets to be produced in parallel. Failure events are captured through EventBridge and delivered through SNS notifications.
+
+### Analytics API Request Flow
+
+The Analytics API exposes Gold analytical datasets through a thin serverless API while keeping HTTP routing, business orchestration, and SQL generation separated.
+
+```mermaid
+flowchart LR
+    CLIENT["HTTP Client"]
+    APIGW["Amazon API Gateway<br/>GET /analytics"]
+    HANDLER["Lambda Handler<br/>Validation & Routing"]
+    SERVICE["AthenaService<br/>Query Orchestration"]
+    REPO["AthenaQueries<br/>SQL Generation"]
+    ATHENA["Amazon Athena"]
+    CATALOG["AWS Glue<br/>Data Catalog"]
+    GOLD["Amazon S3 Gold<br/>Parquet"]
+    RESULT["JSON Response"]
+
+    CLIENT -->|"operation + limit"| APIGW
+    APIGW --> HANDLER
+    HANDLER --> SERVICE
+    SERVICE --> REPO
+    REPO -->|"SQL"| SERVICE
+    SERVICE -->|"boto3"| ATHENA
+
+    ATHENA -. metadata .-> CATALOG
+    ATHENA -. query data .-> GOLD
+
+    ATHENA -->|"query results"| SERVICE
+    SERVICE --> HANDLER
+    HANDLER --> RESULT
+    RESULT --> APIGW
+    APIGW --> CLIENT
+```
+
+Supported operations:
+
+` sales_by_state ` · ` sales_by_category ` · ` sales_by_payment_type ` · ` top_customers ` · ` top_sellers `
+
+Requests default to `sales_by_state` and accept a validated `limit` from 1 to 100.
 
 ## What this project demonstrates
 
@@ -55,7 +157,7 @@ The AWS environment also uses Glue Workflow conditional triggers, EventBridge fa
 - Backward-compatible Gold metrics plus explicit delivered-order metrics.
 - Parallel Gold processing through AWS Glue Workflow.
 - Athena reconciliation queries and Power BI consumption.
-- Terraform-deployed AWS Lambda Analytics API using a Repository -> Service -> Handler pattern with Athena-backed analytical access.
+- Terraform-deployed Analytics API using Amazon API Gateway, AWS Lambda, a Repository -> Service -> Handler pattern, and Athena-backed access to all five Gold analytical datasets.
 - Event-driven failure monitoring through EventBridge and SNS.
 - Docker-based automated PySpark tests without AWS credentials.
 
@@ -161,11 +263,11 @@ The pinned Apache Spark 3.5.4 suite currently contains 10 tests covering schemas
 
 The Analytics API includes `pytest` tests under `functions/analytics_api/tests/`:
 
-- Repository unit tests validate SQL generation without AWS access.
-- Service integration tests validate Python -> boto3 -> Athena -> Glue Catalog -> S3 Gold -> results.
-- Handler tests validate the Lambda entry point and HTTP-style JSON response.
+- Repository tests validate SQL generation for all five Gold analytical operations without AWS access.
+- Service tests validate analytical delegation and retain real Athena integration coverage.
+- Handler tests validate operation routing, default behavior, limit validation, unsupported operations, and API Gateway query parameters.
 
-The current Analytics API suite passes 3/3 tests. The deployed Lambda has also completed a successful end-to-end AWS invocation.
+The current Analytics API suite passes 22/22 tests. All five analytical operations have also been validated through the deployed Lambda, and the HTTP API has been validated end to end through Amazon API Gateway.
 
 ## AWS services and tools
 
@@ -176,8 +278,8 @@ The current Analytics API suite passes 3/3 tests. The deployed Lambda has also c
 | AWS Glue Workflow | Conditional orchestration and parallel Gold execution |
 | AWS Glue Crawlers and Data Catalog | Metadata discovery and table definitions |
 | Amazon Athena | SQL validation and analytics |
-| AWS Lambda | Deployed Analytics API runtime |
-| API Gateway | Planned HTTP entry point for the Analytics API |
+| AWS Lambda | Deployed Analytics API runtime and analytical request routing |
+| Amazon API Gateway | Deployed HTTP entry point exposing `GET /analytics` |
 | Amazon CloudWatch | Glue execution logs |
 | Amazon EventBridge | Glue failure-event routing |
 | Amazon SNS | Email failure notifications |
@@ -225,7 +327,7 @@ The editable dashboard is stored at `powerbi/olist_dashboard.pbix`.
 
 ## Deployment state
 
-The active AWS platform is managed through Terraform with remote state. Core infrastructure and the Glue workflow have been reconciled and validated in AWS. The Analytics Lambda IAM resources and `olist-analytics-api-dev` runtime are also Terraform-managed and deployed. AWS runtime evidence and current implementation status are recorded in `docs/project-status.md`.
+The active AWS platform is managed through Terraform with remote state. Core infrastructure and the Glue workflow have been reconciled and validated in AWS. The Analytics API infrastructure is also Terraform-managed, including Lambda packaging and deployment, IAM permissions, Amazon API Gateway HTTP API, Lambda proxy integration, routing, and invocation permissions. All five analytical operations have been validated through the deployed Lambda, and the HTTP API has been validated end to end. AWS runtime evidence and current implementation status are recorded in `docs/project-status.md`.
 
 Use the [final deployment order](docs/deployments/final-deployment-order.md) rather than deploying individual files ad hoc.
 
@@ -236,11 +338,10 @@ Brazilian E-Commerce Public Dataset by Olist: <https://www.kaggle.com/datasets/o
 ## Roadmap
 
 - Complete remaining downstream validation and Power BI refresh checks.
-- Extend the Analytics API to all five Gold analytical datasets.
-- Add multi-query routing to the Lambda handler.
-- Extend Analytics API automated test coverage.
-- Integrate API Gateway and validate HTTP endpoints.
-- Add CI/CD for syntax, package, PySpark, and Analytics API tests.
+- Add authentication and authorization if the Analytics API is exposed beyond controlled development use.
+- Add API-specific observability, structured logging, metrics, and alarms.
+- Add throttling and usage controls where appropriate.
+- Add CI/CD for syntax, package, PySpark, Analytics API tests, and post-deployment smoke tests.
 - Optional Apache Iceberg evaluation if ACID table capabilities are required.
 
 ## Author

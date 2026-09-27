@@ -60,15 +60,39 @@ Current coverage:
 
 | Test type | Location | Purpose | AWS required |
 |---|---|---|---|
-| Unit | `tests/repositories/test_athena_queries.py` | Validate SQL generation in `AthenaQueries`. | No |
-| Integration | `tests/services/test_athena_service.py` | Validate Python -> boto3 -> Athena -> Glue Catalog -> S3 Gold -> results. | Yes |
-| Handler | `tests/handler/test_handler.py` | Validate the Lambda entry point and HTTP-style JSON response. | No |
+| Repository | `tests/repositories/test_athena_queries.py` | Validate SQL generation for all five Gold analytical operations. | No |
+| Service | `tests/services/test_athena_service.py` | Validate analytical delegation and the Python -> boto3 -> Athena -> Glue Catalog / S3 Gold -> results integration path. | Integration test only |
+| Handler | `tests/handler/test_handler.py` | Validate operation routing, defaults, limit validation, unsupported operations, API Gateway query parameters, and HTTP-style responses. | No |
 
-The current Analytics API test suite passes 3/3 tests.
+The current Analytics API test suite passes 22/22 tests.
 
-The integration test has been executed successfully in the current development environment. It depends on valid AWS configuration, an accessible Athena database, the Glue Data Catalog, S3 Gold data, and an Athena query-result location.
+Current automated coverage includes:
 
-In addition to the local pytest coverage, the deployed `olist-analytics-api-dev` Lambda has been invoked successfully in AWS, validating the runtime path from Lambda through Athena and `olist_gold_db` to a JSON response.
+- SQL generation for all five Gold analytical operations.
+- Service-layer delegation for all five analytical operations.
+- Real Athena integration coverage.
+- Default `sales_by_state` routing.
+- Explicit operation routing.
+- Default and explicit result limits.
+- Validation of non-integer limits.
+- Validation of limits outside the supported 1-100 range.
+- Unsupported-operation handling.
+- Amazon API Gateway HTTP API query-parameter handling.
+
+The Athena integration test depends on valid AWS configuration, an accessible Athena database, the Glue Data Catalog, S3 Gold data, and an Athena query-result location.
+
+In addition to local pytest coverage, all five analytical operations have been invoked successfully through the deployed `olist-analytics-api-dev` Lambda against Athena and `olist_gold_db`.
+
+The deployed HTTP API has also been validated end to end through:
+
+```text
+HTTP Client
+    -> Amazon API Gateway
+    -> AWS Lambda
+    -> Athena
+    -> AWS Glue Data Catalog / S3 Gold
+    -> JSON response
+```
 
 ## Architecture for testability
 
@@ -87,4 +111,4 @@ On 2026-06-19, all 10 tests passed with Apache Spark 3.5.4. The final verificati
 
 Analytics API pytest coverage was added after this PySpark baseline and is tracked separately because the service integration test consumes AWS resources.
 
-As of 2026-09-27, the Analytics API pytest suite passes 3/3 tests and the deployed Lambda has completed a successful end-to-end AWS invocation.
+As of 2026-09-27, the Analytics API pytest suite passes 22/22 tests. All five analytical operations have completed successful deployed Lambda invocations, and the Amazon API Gateway HTTP path has been validated end to end against the Gold analytical layer.

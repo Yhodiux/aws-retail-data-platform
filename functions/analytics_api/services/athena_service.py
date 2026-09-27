@@ -1,4 +1,4 @@
-import time
+﻿import time
 import boto3
 from repositories.athena_queries import AthenaQueries
 from config import AWS_REGION, ATHENA_DATABASE, ATHENA_OUTPUT_LOCATION
@@ -20,8 +20,8 @@ class AthenaService:
         )
 
         return response["QueryExecutionId"]
-        
-        
+
+
     def wait_for_completion(self, query_execution_id: str) -> str:
         while True:
             response = self.client.get_query_execution(
@@ -58,7 +58,7 @@ class AthenaService:
             results.append(dict(zip(headers, values)))
 
         return results
-    
+
     def run_query(self, query: str) -> list[dict]:
         query_execution_id = self.execute_query(query)
 
@@ -68,7 +68,23 @@ class AthenaService:
             raise Exception(f"Athena query failed with state: {state}")
 
         return self.get_results(query_execution_id)
-    
+
     def sales_by_state(self, limit: int = 10) -> list[dict]:
         query = AthenaQueries.sales_by_state(limit=limit)
+        return self.run_query(query)
+
+    def sales_by_category(self, limit: int = 10) -> list[dict]:
+        query = AthenaQueries.sales_by_category(limit=limit)
+        return self.run_query(query)
+
+    def sales_by_payment_type(self, limit: int = 10) -> list[dict]:
+        query = AthenaQueries.sales_by_payment_type(limit=limit)
+        return self.run_query(query)
+
+    def top_customers(self, limit: int = 10) -> list[dict]:
+        query = AthenaQueries.top_customers(limit=limit)
+        return self.run_query(query)
+
+    def top_sellers(self, limit: int = 10) -> list[dict]:
+        query = AthenaQueries.top_sellers(limit=limit)
         return self.run_query(query)

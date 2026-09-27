@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-06-26
+Last updated: 2026-09-27
 
 ## Current state
 
@@ -15,7 +15,7 @@ The current pipeline implements:
 - Athena consumption and a Power BI dashboard.
 - EventBridge and SNS failure notifications documented with screenshots.
 
-The repository also contains a deployed Analytics API under `functions/analytics_api/`. The current implementation provides SQL generation, Athena integration through `boto3`, result retrieval, a thin Lambda handler, automated pytest coverage, and a Terraform-managed AWS Lambda deployment. The deployed `sales_by_state` path has been validated end to end against `olist_gold_db`.
+The repository also contains a deployed Analytics API under `functions/analytics_api/`. The implementation provides SQL generation and Athena integration for all five Gold analytical datasets, multi-operation Lambda routing, validated result limits, automated pytest coverage, Terraform-managed AWS Lambda deployment, and an Amazon API Gateway HTTP API. All five analytical operations have been validated through the deployed Lambda, and the HTTP path has been validated end to end through API Gateway.
 
 Terraform manages the active AWS platform, including S3, IAM, Glue jobs, crawlers, workflow triggers, Data Catalog databases, EventBridge, SNS, and the Analytics Lambda infrastructure. The core data platform was reconciled and validated in AWS during the June deployment, and the Analytics Lambda IAM and runtime resources were added in September.
 
@@ -23,12 +23,12 @@ Terraform manages the active AWS platform, including S3, IAM, Glue jobs, crawler
 
 ### Phase 5 — Analytics API
 
-Status: Lambda foundation deployed and validated; multi-query routing and API Gateway pending
+Status: Analytics API deployed and validated end to end through Lambda, Athena, and API Gateway
 
 Phase 1 Gold status: local implementation complete; runtime and AWS validation deferred.
 Phase 2 Silver status: local implementation and full-source validation complete; AWS runtime validation deferred.
 Phase 3 testing status: 10/10 Docker-based PySpark tests passing.
-Analytics API status: Lambda deployed and validated end to end for `sales_by_state`; multi-query routing and API Gateway pending.
+Analytics API status: all five Gold analytical operations are implemented, tested, deployed, and validated through AWS Lambda; API Gateway HTTP access is deployed and validated.
 
 Objective: make the AWS platform reproducible while preserving the existing manually deployed environment through explicit imports and reviewed plans.
 
@@ -54,11 +54,11 @@ Phase 1 confirmed business rules:
 - New metric names must identify the underlying business value instead of using another generic sales alias.
 - Non-delivered orders remain represented by the legacy metrics for backward compatibility and may receive explicit operational metrics later.
 
-### Phase 6 - Analytics API foundation
+### Phase 6 - Analytics API
 
-- The Lambda handler is implemented as a thin entry point and delegates analytical work to the service layer.
+Status: Completed for the current project scope
 
-During this phase, a new Analytics API structure was created under `functions/analytics_api/`.
+The Analytics API is implemented under `functions/analytics_api/` and follows a `Repository -> Service -> Handler` pattern exposed through Amazon API Gateway.
 
 Implemented structure:
 
@@ -71,46 +71,58 @@ Implemented structure:
 - `config.py`
 - `requirements.txt`
 
-The API follows a `Repository -> Service -> Handler` pattern:
+Architecture responsibilities:
 
 - Repository classes generate SQL only.
-- Service classes communicate with AWS services.
-- The Lambda handler remains a thin entry point and is still in construction.
+- Service classes encapsulate communication with Amazon Athena.
+- The Lambda handler validates and routes requests while remaining free of SQL and Athena implementation details.
+- Amazon API Gateway exposes the Lambda through `GET /analytics`.
+
+Supported analytical operations:
+
+- `sales_by_state`
+- `sales_by_category`
+- `sales_by_payment_type`
+- `top_customers`
+- `top_sellers`
+
+The handler supports both direct Lambda invocation and API Gateway HTTP query parameters. Requests may specify an analytical `operation` and a `limit` between 1 and 100. The default operation remains `sales_by_state` with a default limit of 10.
 
 Current components:
 
-- `AthenaQueries.sales_by_state()` builds the SQL for `sales_by_state`.
+- `AthenaQueries` generates SQL for all five Gold analytical datasets.
 - `AthenaService.execute_query()` starts Athena query execution.
 - `AthenaService.wait_for_completion()` waits for terminal Athena states.
 - `AthenaService.get_results()` retrieves Athena result rows.
 - `AthenaService.run_query()` orchestrates execution, waiting, and result retrieval.
-- `AthenaService.sales_by_state()` exposes the current business operation.
-- `handler.lambda_handler()` invokes the service and returns an HTTP-style JSON response.
-- `utils/response.py` centralizes response formatting.
+- `AthenaService` exposes business methods for all five analytical operations.
+- `handler.lambda_handler()` validates input, routes operations, delegates to the service layer, and returns HTTP-style JSON responses.
+- `utils/response.py` centralizes successful response formatting.
 
-Testing added:
+Testing:
 
-- Unit test: `functions/analytics_api/tests/repositories/test_athena_queries.py`.
-- Integration test: `functions/analytics_api/tests/services/test_athena_service.py`.
-- Handler test: `functions/analytics_api/tests/handler/test_handler.py`.
-- Current Analytics API test suite: 3/3 tests passing.
+- Repository query tests cover all five Gold analytical operations.
+- Service tests cover business-method delegation and retain real Athena integration coverage.
+- Handler tests cover routing, defaults, limits, invalid input, unsupported operations, and API Gateway query parameters.
+- Current Analytics API test suite: 22/22 tests passing.
 
-The integration test validates the path from Python to `boto3`, Amazon Athena, the AWS Glue Data Catalog, S3 Gold data, and query results. It has been executed successfully in the current development environment.
+AWS deployment:
 
-The Analytics API has also been deployed as `olist-analytics-api-dev` using the Python 3.13 AWS Lambda runtime. A real AWS invocation successfully validated the path from Lambda through Athena and `olist_gold_db` to the JSON response.
-
-Local example:
-
-- `functions/analytics_api/examples/run_sales_by_state.py`.
+- AWS Lambda `olist-analytics-api-dev` is deployed using Python 3.13.
+- Terraform manages Lambda packaging, deployment, IAM permissions, and environment configuration.
+- Terraform manages the Amazon API Gateway HTTP API, Lambda proxy integration, `GET /analytics` route, `$default` stage, CORS configuration, and Lambda invocation permission.
+- All five analytical operations have been validated through real Lambda invocations against Athena and `olist_gold_db`.
+- HTTP requests through API Gateway have been validated for the default `sales_by_state` operation and a parameterized `top_sellers` request.
 
 Architecture decisions:
 
-- Separate Repository and Service responsibilities.
-- Keep SQL isolated from consumers.
-- Use `pytest` for Analytics API tests.
-- Separate unit tests from integration tests.
-- Build the API architecture before deployment.
-- Keep the Lambda handler thin and free of business logic.
+- Separate Repository, Service, and Handler responsibilities.
+- Keep SQL isolated from API consumers.
+- Keep the Lambda handler thin and free of Athena implementation logic.
+- Preserve backward compatibility for direct Lambda invocation.
+- Validate API inputs before invoking Athena.
+- Manage serverless infrastructure through Terraform.
+- Use `pytest` for automated API testing.
 
 ## Roadmap
 
@@ -122,7 +134,7 @@ Architecture decisions:
 | 3 | Local PySpark tests | Completed |
 | 4 | Documentation consolidation | Completed |
 | 5 | Terraform infrastructure | Deployed and validated in AWS |
-| 6 | Analytics API | Lambda foundation deployed; multi-query routing and API Gateway pending |
+| 6 | Analytics API | Completed for current scope; Lambda and API Gateway deployed and validated |
 | 7 | CI/CD | Not started |
 | 8 | Optional Apache Iceberg evaluation | Backlog |
 
@@ -140,7 +152,7 @@ Architecture decisions:
 
 No current infrastructure blocker. AWS access, Terraform remote state, and the active `us-east-1` environment have been validated.
 
-For the Analytics API, the next implementation work is application-level: add the remaining Gold analytical operations, implement multi-query handler routing, extend automated tests, redeploy the Lambda, and integrate API Gateway.
+The Analytics API has no current implementation blocker for the defined scope. Future API work is considered enhancement work rather than completion work.
 
 ## Current checkpoint — 2026-06-19
 
@@ -178,13 +190,9 @@ Pending work:
 4. Review and commit the resulting local release.
 5. Publish the repository and execute the documented AWS deployment when ready.
 
-Analytics API roadmap:
+Analytics API roadmap status:
 
-1. Complete `AthenaService` with business methods such as `sales_by_state`, `top_customers`, `top_sellers`, `sales_by_category`, and `sales_by_payment_type`.
-2. Implement the Lambda handler.
-3. Integrate API Gateway.
-4. Automate deployment through Terraform.
-5. Incorporate final technical documentation and diagrams.
+The original Analytics API roadmap has been completed for the current scope: all five Gold operations, Lambda routing, Terraform deployment, API Gateway integration, automated testing, and end-to-end HTTP validation are implemented. Future work is tracked as optional enhancement work.
 
 Resume point: complete Athena reconciliation, deploy/run Silver referential validation, validate Power BI refresh, and retire the legacy bucket only after downstream sign-off.
 
@@ -237,23 +245,29 @@ After restarting:
 Current state:
 
 - Analytics API source lives under `functions/analytics_api/`.
-- Repository -> Service -> Handler architecture is implemented for `sales_by_state`.
-- Repository, Service integration, and Handler tests pass: 3/3.
+- Repository -> Service -> Handler architecture is implemented for all five Gold analytical datasets.
+- Supported operations are `sales_by_state`, `sales_by_category`, `sales_by_payment_type`, `top_customers`, and `top_sellers`.
+- Handler routing supports both direct Lambda events and API Gateway HTTP query parameters.
+- Result limits are validated between 1 and 100, with a default of 10.
+- Complete Analytics API pytest suite passes: 22/22.
 - Terraform manages the Analytics Lambda IAM role and least-privilege access policy.
 - Terraform uses the HashiCorp Archive provider to package the Lambda artifact.
 - AWS Lambda `olist-analytics-api-dev` is deployed using Python 3.13.
 - Lambda configuration points to `olist_gold_db` and the Terraform-managed Athena result location.
-- A real AWS Lambda invocation completed successfully with `statusCode: 200`.
-- The deployed execution path Lambda -> Athena -> Gold -> JSON has been validated.
-- Terraform deployment completed without modifying or destroying existing platform resources.
-- Changes are committed and pushed to `main`.
+- All five analytical operations have been successfully invoked through the deployed Lambda against Athena and the Gold layer.
+- Amazon API Gateway HTTP API is deployed through Terraform.
+- API Gateway exposes `GET /analytics` through a Lambda proxy integration and `$default` stage.
+- The default HTTP request successfully returns `sales_by_state` analytical results.
+- A parameterized HTTP request using `operation=top_sellers&limit=5` successfully returns Gold analytical results.
+- The deployed HTTP execution path API Gateway -> Lambda -> Athena -> Glue Data Catalog -> S3 Gold -> JSON has been validated.
+- Terraform deployment completed without destroying existing platform resources.
 
-Next steps:
+Current Analytics API scope: completed.
 
-1. Add Repository and Service support for the remaining Gold analytical datasets.
-2. Add handler routing for multiple analytical operations.
-3. Extend pytest coverage for the new operations and routes.
-4. Redeploy and validate every operation through AWS Lambda.
-5. Integrate API Gateway.
-6. Validate HTTP endpoints.
-7. Update final architecture and user-facing documentation.
+Potential next enhancements:
+
+1. Add authentication and authorization if the API is exposed beyond controlled development use.
+2. Add API-specific CloudWatch metrics, structured logging, and alarms.
+3. Add throttling and usage controls.
+4. Add richer filtering or pagination where useful.
+5. Add automated CI/CD and post-deployment HTTP smoke tests.

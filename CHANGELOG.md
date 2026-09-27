@@ -35,6 +35,12 @@ All notable repository changes will be documented in this file. AWS deployment s
 - Terraform-managed deployment of `olist-analytics-api-dev` using the Python 3.13 Lambda runtime.
 - Terraform Archive provider packaging for the Analytics API Lambda artifact.
 - Successful AWS Lambda invocation validating the Analytics API end to end against Athena and `olist_gold_db`.
+- Analytics API query support for all five Gold analytical datasets: `sales_by_state`, `sales_by_category`, `sales_by_payment_type`, `top_customers`, and `top_sellers`.
+- Handler routing with configurable analytical operation and validated result limits from 1 to 100.
+- Pytest coverage for Analytics API repositories, service delegation, handler routing, input validation, and API Gateway query parameters, reaching 22 passing tests.
+- Terraform-managed Amazon API Gateway HTTP API exposing the Analytics API through `GET /analytics`.
+- API Gateway Lambda proxy integration, automatic `$default` stage deployment, CORS configuration, and least-privilege Lambda invocation permission.
+- Terraform output for the deployed Analytics API HTTP endpoint.
 
 ### Changed
 
@@ -71,3 +77,8 @@ All notable repository changes will be documented in this file. AWS deployment s
 - Promoted the Analytics API from a local-only foundation to a deployed AWS Lambda implementation.
 - Validated the deployed `sales_by_state` path end to end: Lambda -> Athena -> `olist_gold_db` -> S3 query results -> JSON response.
 - Renamed the serverless source directory from `lambda` to `functions` to avoid naming ambiguity and aligned the implementation and documentation with the new structure.
+- Expanded `AthenaQueries` and `AthenaService` from `sales_by_state` only to all five Gold analytical datasets.
+- Evolved the Lambda handler from a single fixed query to backward-compatible operation routing supporting both direct Lambda events and API Gateway HTTP query parameters.
+- Redeployed `olist-analytics-api-dev` with multi-operation routing while preserving the default `sales_by_state` behavior.
+- Validated all five analytical operations end to end through the deployed Lambda against Athena and `olist_gold_db`.
+- Exposed and validated the Analytics API over HTTP through API Gateway, including default `sales_by_state` requests and parameterized `top_sellers` requests.

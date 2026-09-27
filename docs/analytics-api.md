@@ -1,16 +1,14 @@
 # Analytics API
 
-The Analytics API is an AWS Lambda component that exposes analytical results produced by the AWS Retail Data Platform through Amazon Athena.
+The Analytics API is an AWS Lambda and Amazon API Gateway component that exposes analytical results produced by the AWS Retail Data Platform through Amazon Athena.
 
 This component belongs to this repository only. It is not currently part of ALCAZ, although it may later serve as a technical base for that ecosystem.
 
 ## Current objective
 
-Provide a thin API layer over the Gold analytical datasets by encapsulating Athena access behind Python services.
+Provide a thin HTTP API layer over the Gold analytical datasets by encapsulating Athena access behind Python Repository, Service, and Handler layers.
 
-The current implementation has progressed from local development to a deployed AWS Lambda that has been validated end to end against the Gold layer through Amazon Athena.
-
-API Gateway integration and multi-query routing are still pending.
+The current implementation is deployed in AWS, supports all five Gold analytical datasets, and has been validated end to end through both direct Lambda invocation and Amazon API Gateway.
 
 ## Location
 
@@ -36,14 +34,15 @@ functions/analytics_api/
 `-- requirements.txt
 ```
 
-## Architectural pattern
+## Architecture
 
-The component follows a `Repository -> Service -> Handler` pattern.
+The component follows a `Repository -> Service -> Handler` pattern and is exposed through Amazon API Gateway HTTP API.
 
 ```mermaid
 flowchart LR
-    Consumer[Lambda invocation]
-    Handler[Lambda Handler]
+    Client[HTTP Client]
+    Gateway[Amazon API Gateway HTTP API]
+    Handler[AWS Lambda Handler]
     Service[AthenaService]
     Repository[AthenaQueries]
     Athena[Amazon Athena]
@@ -51,7 +50,8 @@ flowchart LR
     Gold[S3 Gold layer]
     Results[S3 Athena query results]
 
-    Consumer --> Handler
+    Client --> Gateway
+    Gateway --> Handler
     Handler --> Service
     Service --> Repository
     Service --> Athena
@@ -60,53 +60,129 @@ flowchart LR
     Athena --> Results
     Results --> Service
     Service --> Handler
+    Handler --> Gateway
+    Gateway --> Client
 ```
 
 | Layer | Responsibility | Current status |
 |---|---|---|
-| Repository | Build SQL queries only. It does not execute queries or call AWS services. | `AthenaQueries.sales_by_state()` implemented. |
-| Service | Encapsulate communication with Athena through `boto3`. | Query execution, polling, result retrieval, and `sales_by_state()` orchestration implemented. |
-| Handler | Thin AWS Lambda entry point that delegates analytical work to the service layer. | Implemented, tested, deployed, and validated in AWS. |
+| Repository | Build analytical SQL without executing queries or calling AWS services. | Five Gold analytical queries implemented and tested. |
+| Service | Encapsulate Athena execution through `boto3`, including polling and result retrieval. | Core Athena integration and five analytical business methods implemented. |
+| Handler | Validate input, route analytical operations, delegate to the service layer, and format responses. | Implemented, tested, deployed, and validated. |
+| API Gateway | Expose the Lambda through an HTTP endpoint. | HTTP API deployed and validated through `GET /analytics`. |
 
-## Implemented components
+## Supported analytical operations
 
-### AthenaQueries
+The API currently supports:
+
+- `sales_by_state`
+- `sales_by_category`
+- `sales_by_payment_type`
+- `top_customers`
+- `top_sellers`
+
+If no operation is supplied, the API defaults to:
+
+```text
+sales_by_state
+```
+
+Each operation accepts an optional `limit`.
+
+Valid limits are:
+
+```text
+1..100
+```
+
+The default is:
+
+```text
+10
+```
+
+## AthenaQueries
 
 `AthenaQueries` is responsible only for SQL generation.
 
-Current query:
+Implemented methods:
 
 - `sales_by_state()`
-
-It does not execute SQL and does not depend on AWS credentials.
-
-### AthenaService
-
-`AthenaService` owns the integration with Amazon Athena.
-
-Current capabilities include:
-
-- Execute Athena queries.
-- Poll query execution until completion.
-- Retrieve Athena results.
-- Orchestrate the `sales_by_state()` analytical query.
-
-Additional business methods are planned for:
-
-- `top_customers()`
-- `top_sellers()`
 - `sales_by_category()`
 - `sales_by_payment_type()`
+- `top_customers()`
+- `top_sellers()`
 
-### Lambda handler
+The Repository layer does not execute SQL and does not require AWS credentials.
+
+## AthenaService
+
+`AthenaService` owns communication with Amazon Athena.
+
+Core integration methods include:
+
+- `execute_query()`
+- `wait_for_completion()`
+- `get_results()`
+- `run_query()`
+
+Analytical business methods include:
+
+- `sales_by_state()`
+- `sales_by_category()`
+- `sales_by_payment_type()`
+- `top_customers()`
+- `top_sellers()`
+
+Each analytical method delegates SQL generation to `AthenaQueries` and query execution to the shared Athena integration logic.
+
+## Lambda handler
 
 `handler.py` is the AWS Lambda entry point.
 
-The handler remains intentionally thin:
+The handler remains intentionally thin. Its responsibilities are:
 
-1. Instantiate the service layer.
-2. Execute the current `sales_by_state()` operation.
-3. Return a JSON HTTP-style response.
+1. Read the requested analytical operation.
+2. Read and validate the result limit.
+3. Select the corresponding `AthenaService` method.
+4. Delegate execution to the service layer.
+5. Return a JSON HTTP response.
+
+The handler supports both direct Lambda events and Amazon API Gateway HTTP API query parameters.
+
+### Direct Lambda event
+
+Example:
+
+```json
+{
+  "operation": "top_sellers",
+  "limit": 5
+}
+```
+
+An empty direct event remains backward compatible:
+
+```json
+{}
+```
+
+and executes `sales_by_state` with the default limit.
+
+### HTTP query parameters
+
+Example request:
+
+```text
+GET /analytics?operation=top_sellers&limit=5
+```
+
+Input validation returns HTTP-style `400` responses for:
+
+- Unsupported operations.
+- Non-integer limits.
+- Limits below 1.
+- Limits above 100.
 
 Response formatting is centralized in:
 
@@ -114,53 +190,85 @@ Response formatting is centralized in:
 functions/analytics_api/utils/response.py
 ```
 
-The handler has been validated both locally and through a real AWS Lambda invocation.
-
 ## Testing
 
 The Analytics API uses `pytest`.
 
-Current automated coverage includes three tests:
+Tests are organized under:
 
 ```text
-functions/analytics_api/tests/handler/test_handler.py
+functions/analytics_api/tests/
+```
+
+Current automated coverage contains 22 passing tests across Repository, Service, and Handler behavior.
+
+### Repository tests
+
+Location:
+
+```text
 functions/analytics_api/tests/repositories/test_athena_queries.py
+```
+
+Purpose:
+
+- Validate SQL generation for all five Gold analytical operations.
+- Avoid AWS calls.
+- Keep Repository tests deterministic and fast.
+
+### Service tests
+
+Location:
+
+```text
 functions/analytics_api/tests/services/test_athena_service.py
 ```
 
-### Repository test
+Purpose:
+
+- Validate delegation from analytical business methods to shared Athena execution logic.
+- Preserve a real Athena integration test for the service layer.
+- Exercise `boto3`, Amazon Athena, AWS Glue Data Catalog, S3 Gold data, and Athena result retrieval.
+
+### Handler tests
+
+Location:
+
+```text
+functions/analytics_api/tests/handler/test_handler.py
+```
 
 Purpose:
 
-- Validate SQL generation.
-- Avoid AWS calls.
-- Keep repository tests deterministic and fast.
+- Validate default routing.
+- Validate all supported analytical operations.
+- Validate explicit and default limits.
+- Validate invalid limits.
+- Validate unsupported operations.
+- Validate API Gateway query-string parameter handling.
+- Avoid unnecessary AWS calls through mocks.
 
-### Service integration test
+The complete Analytics API test suite has been executed successfully with:
 
-Purpose:
-
-- Validate the integration path from Python to Athena.
-- Exercise `boto3`, Amazon Athena, the AWS Glue Data Catalog, S3 Gold data, and Athena result retrieval.
-
-### Handler test
-
-Purpose:
-
-- Validate the Lambda entry-point behavior.
-- Validate the HTTP-style success response returned by the handler.
-
-The current test suite has been executed successfully with all three tests passing.
+```text
+22 passed
+```
 
 ## Local execution
 
 The Analytics API can be exercised locally through the service layer and Lambda handler.
 
-The local implementation was validated before deployment, including retrieval of `sales_by_state` results from Athena.
+A local service example remains available at:
+
+```text
+functions/analytics_api/examples/run_sales_by_state.py
+```
+
+Local development and automated testing are used before Terraform-managed AWS deployment.
 
 ## AWS deployment
 
-The Analytics API is deployed as:
+The Lambda function is deployed as:
 
 ```text
 olist-analytics-api-dev
@@ -178,20 +286,63 @@ Current Lambda configuration:
 Terraform manages:
 
 - Lambda packaging through the HashiCorp Archive provider.
-- Lambda deployment.
+- Lambda deployment and code updates.
 - Lambda IAM role.
-- Least-privilege access policy required for Athena, Glue, S3, and logging.
+- Least-privilege access required for Athena, Glue, S3, and logging.
+- Amazon API Gateway HTTP API.
+- Lambda proxy integration.
+- `GET /analytics` routing.
+- Automatic `$default` API Gateway stage deployment.
+- API Gateway CORS configuration.
+- Permission for API Gateway to invoke the Lambda.
+- Analytics API endpoint output.
 
-The Lambda deployment package is generated from `functions/analytics_api/` and excludes local test and cache artifacts.
+The Lambda deployment package is generated from:
+
+```text
+functions/analytics_api/
+```
+
+and excludes local tests, examples, cache directories, and other development-only artifacts.
+
+## HTTP API
+
+Amazon API Gateway exposes the Analytics Lambda through:
+
+```text
+GET /analytics
+```
+
+Default request:
+
+```text
+GET /analytics
+```
+
+executes:
+
+```text
+sales_by_state
+```
+
+Parameterized request example:
+
+```text
+GET /analytics?operation=top_sellers&limit=5
+```
+
+The API Gateway endpoint is generated and exposed through Terraform output rather than hard-coded into the application documentation.
 
 ## End-to-end validation
 
-The deployed Lambda has been invoked successfully in AWS.
+The deployed system has been validated through both direct AWS Lambda invocation and HTTP requests through API Gateway.
 
-The validated execution path is:
+The complete HTTP execution path is:
 
 ```text
-AWS Lambda
+HTTP Client
+    -> Amazon API Gateway
+    -> AWS Lambda
     -> handler.py
     -> AthenaService
     -> AthenaQueries
@@ -200,42 +351,60 @@ AWS Lambda
     -> olist_gold_db
     -> S3 Gold data
     -> Athena query results
-    -> JSON response
+    -> JSON HTTP response
 ```
 
-The deployed `sales_by_state` invocation returned:
+All five analytical operations were successfully invoked against the deployed Lambda:
 
 ```text
-statusCode: 200
-Content-Type: application/json
+sales_by_state
+sales_by_category
+sales_by_payment_type
+top_customers
+top_sellers
 ```
 
-with analytical results from the Gold layer.
+The deployed API was also validated through HTTP with:
 
-This confirms that the Analytics API can execute outside the local development environment using its Terraform-managed IAM permissions and AWS resources.
+```text
+GET /analytics
+```
+
+and a parameterized analytical request:
+
+```text
+GET /analytics?operation=top_sellers&limit=5
+```
+
+Both returned successful analytical results from the Gold layer.
+
+This validates the complete deployed path from an HTTP client through API Gateway, Lambda, Athena, Glue Data Catalog, S3 Gold data, and back to a JSON response.
 
 ## Current capabilities
 
-At this stage, the project can:
+At this stage, the Analytics API can:
 
-- Generate analytical SQL.
+- Generate SQL for all five Gold analytical datasets.
 - Execute Athena queries locally and from AWS Lambda.
 - Retrieve analytical results from the Gold layer.
-- Return Lambda-compatible JSON responses.
-- Validate Repository, Service, and Handler behavior through automated tests.
+- Route requests dynamically to five analytical operations.
+- Validate result limits between 1 and 100.
+- Support both direct Lambda events and API Gateway query parameters.
+- Return Lambda-compatible and HTTP-compatible JSON responses.
+- Validate Repository, Service, and Handler behavior through 22 automated tests.
 - Package and deploy the Analytics Lambda through Terraform.
-- Execute the deployed `sales_by_state` path end to end in AWS.
-
-The Analytics API is deployed, but it is not yet integrated with API Gateway and currently exposes only the `sales_by_state` analytical operation through the handler.
+- Deploy and manage Amazon API Gateway through Terraform.
+- Execute all five analytical operations end to end in AWS.
+- Serve analytical results through an HTTP endpoint.
 
 ## Roadmap
 
-Planned work:
+Potential future enhancements include:
 
-- Add Repository and Service support for the remaining Gold analytical datasets.
-- Add handler routing for multiple analytical operations.
-- Extend automated tests for the new routes and queries.
-- Redeploy and validate each operation in AWS Lambda.
-- Integrate API Gateway.
-- Validate the Analytics API through HTTP endpoints.
-- Update final architecture documentation and diagrams.
+- Add API authentication and authorization.
+- Add throttling and usage controls appropriate for public or shared environments.
+- Add structured observability and API-specific CloudWatch metrics.
+- Add pagination or richer filtering for analytical operations.
+- Add API versioning if the external contract evolves.
+- Add additional analytical endpoints as new Gold datasets are introduced.
+- Add automated CI/CD deployment and post-deployment smoke tests.
