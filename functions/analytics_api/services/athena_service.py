@@ -1,6 +1,6 @@
 import time
 import boto3
-
+from repositories.athena_queries import AthenaQueries
 from config import AWS_REGION, ATHENA_DATABASE, ATHENA_OUTPUT_LOCATION
 
 
@@ -68,3 +68,7 @@ class AthenaService:
             raise Exception(f"Athena query failed with state: {state}")
 
         return self.get_results(query_execution_id)
+    
+    def sales_by_state(self, limit: int = 10) -> list[dict]:
+        query = AthenaQueries.sales_by_state(limit=limit)
+        return self.run_query(query)
