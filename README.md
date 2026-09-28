@@ -5,6 +5,8 @@ Portfolio project demonstrating an end-to-end AWS analytics data platform for th
 > Repository status: the core AWS data platform is Terraform-managed and has been validated in AWS, including the Silver/Gold workflow, crawlers, Gold quality controls, and supporting infrastructure. See [project status](docs/project-status.md).
 >
 > Analytics API status: the API under `functions/analytics_api/` is deployed as the `olist-analytics-api-dev` AWS Lambda using Python 3.13 and exposed through an Amazon API Gateway HTTP API. All five Gold analytical operations are implemented, covered by automated tests, and validated through the deployed Lambda. The HTTP path has also been validated end to end through API Gateway, Lambda, Athena, `olist_gold_db`, and S3 Gold data.
+>
+> CI/CD status: GitHub Actions runs automated Analytics API tests, PySpark pipeline tests, and Terraform validation. AWS deployments use GitHub OIDC to assume a dedicated IAM role without storing long-lived AWS access keys in GitHub. Separate manual Terraform Plan and Terraform Apply workflows use the S3 remote state; the deployment flow has been validated end to end, including a post-deployment plan returning `No changes`.
 
 ## Documentation
 
@@ -160,6 +162,9 @@ Requests default to `sales_by_state` and accept a validated `limit` from 1 to 10
 - Terraform-deployed Analytics API using Amazon API Gateway, AWS Lambda, a Repository -> Service -> Handler pattern, and Athena-backed access to all five Gold analytical datasets.
 - Event-driven failure monitoring through EventBridge and SNS.
 - Docker-based automated PySpark tests without AWS credentials.
+- GitHub Actions CI covering Analytics API tests, PySpark pipeline tests, and Terraform formatting/validation.
+- Controlled Terraform deployment workflows authenticated to AWS through GitHub OIDC rather than long-lived AWS credentials.
+- Terraform remote state in Amazon S3, with state locking enabled, supporting consistent local and CI/CD infrastructure operations.
 
 ## Data layers
 
@@ -269,6 +274,43 @@ The Analytics API includes `pytest` tests under `functions/analytics_api/tests/`
 
 The current Analytics API suite passes 22/22 tests. All five analytical operations have also been validated through the deployed Lambda, and the HTTP API has been validated end to end through Amazon API Gateway.
 
+## CI/CD and infrastructure deployment
+
+GitHub Actions provides automated validation and controlled infrastructure deployment for the project.
+
+```text
+Push to main
+    -> CI
+       -> Analytics API Tests
+       -> PySpark Pipeline Tests
+       -> Terraform Validation
+
+Manual infrastructure deployment
+    -> Terraform Plan
+    -> GitHub OIDC authentication
+    -> AWS STS / dedicated IAM role
+    -> Terraform Apply
+    -> AWS infrastructure
+    -> Post-deployment Terraform Plan
+```
+
+The deployment design intentionally separates validation, planning, and infrastructure changes:
+
+- The main CI workflow runs the Analytics API test suite, the Docker-based PySpark pipeline tests, and Terraform validation.
+- A dedicated Terraform Plan workflow can be triggered manually to preview infrastructure changes without modifying AWS resources.
+- A separate Terraform Apply workflow performs controlled infrastructure changes only when explicitly triggered.
+- GitHub Actions authenticates to AWS through the repository's OIDC trust relationship and assumes the `olist-github-actions-dev` IAM role. Long-lived AWS access keys are not stored in GitHub for these workflows.
+- The GitHub Actions role combines read-only discovery with explicit project deployment permissions, including access to the Terraform state and the AWS services managed by this repository.
+- Terraform state is stored remotely in Amazon S3 under the environment-specific state path, with S3 state locking enabled.
+
+The deployment path was validated by applying an in-place Lambda update from GitHub Actions and then running Terraform Plan again. The final reconciliation returned:
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+This confirms that the committed Terraform configuration, remote state, and deployed AWS infrastructure were synchronized after the GitHub Actions deployment.
+
 ## AWS services and tools
 
 | Service or tool | Purpose |
@@ -286,7 +328,9 @@ The current Analytics API suite passes 22/22 tests. All five analytical operatio
 | IAM | Access control |
 | Power BI | Dashboard and reporting |
 | Docker | Isolated local Spark tests |
-| Terraform | Reproducible AWS infrastructure definition |
+| GitHub Actions | Automated CI, Terraform planning, and controlled infrastructure deployment |
+| GitHub OIDC / AWS STS | Short-lived AWS authentication for CI/CD without stored access keys |
+| Terraform | Reproducible AWS infrastructure definition with S3 remote state |
 
 ## Dashboard
 
@@ -327,7 +371,7 @@ The editable dashboard is stored at `powerbi/olist_dashboard.pbix`.
 
 ## Deployment state
 
-The active AWS platform is managed through Terraform with remote state. Core infrastructure and the Glue workflow have been reconciled and validated in AWS. The Analytics API infrastructure is also Terraform-managed, including Lambda packaging and deployment, IAM permissions, Amazon API Gateway HTTP API, Lambda proxy integration, routing, and invocation permissions. All five analytical operations have been validated through the deployed Lambda, and the HTTP API has been validated end to end. AWS runtime evidence and current implementation status are recorded in `docs/project-status.md`.
+The active AWS platform is managed through Terraform with remote state in Amazon S3. Core infrastructure and the Glue workflow have been reconciled and validated in AWS. The Analytics API infrastructure is also Terraform-managed, including Lambda packaging and deployment, IAM permissions, Amazon API Gateway HTTP API, Lambda proxy integration, routing, and invocation permissions. All five analytical operations have been validated through the deployed Lambda, and the HTTP API has been validated end to end. GitHub Actions now provides automated CI plus manually controlled Terraform Plan and Apply workflows. AWS authentication from GitHub uses OIDC and a dedicated IAM role instead of long-lived AWS access keys. The deployment workflow has been validated with a successful GitHub Actions apply followed by a Terraform plan reporting no infrastructure drift. AWS runtime evidence and current implementation status are recorded in `docs/project-status.md`.
 
 Use the [final deployment order](docs/deployments/final-deployment-order.md) rather than deploying individual files ad hoc.
 
@@ -341,7 +385,7 @@ Brazilian E-Commerce Public Dataset by Olist: <https://www.kaggle.com/datasets/o
 - Add authentication and authorization if the Analytics API is exposed beyond controlled development use.
 - Add API-specific observability, structured logging, metrics, and alarms.
 - Add throttling and usage controls where appropriate.
-- Add CI/CD for syntax, package, PySpark, Analytics API tests, and post-deployment smoke tests.
+- Add post-deployment API smoke tests to the existing CI/CD workflows.
 - Optional Apache Iceberg evaluation if ACID table capabilities are required.
 
 ## Author

@@ -25,3 +25,55 @@ resource "aws_cloudwatch_event_target" "glue_failures" {
   arn       = aws_sns_topic.glue_failures.arn
   role_arn  = data.aws_iam_role.eventbridge_sns.arn
 }
+
+# -----------------------------------------------------------------------------
+# Analytics API monitoring
+# -----------------------------------------------------------------------------
+
+resource "aws_cloudwatch_metric_alarm" "analytics_api_errors" {
+  alarm_name        = "olist-analytics-api-errors-${var.environment}"
+  alarm_description = "Alerts when the Analytics API Lambda reports execution errors."
+
+  namespace   = "AWS/Lambda"
+  metric_name = "Errors"
+  statistic   = "Sum"
+
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.analytics_api.function_name
+  }
+
+  alarm_actions = [
+    aws_sns_topic.glue_failures.arn
+  ]
+
+  treat_missing_data = "notBreaching"
+}
+
+resource "aws_cloudwatch_metric_alarm" "analytics_api_duration" {
+  alarm_name        = "olist-analytics-api-duration-${var.environment}"
+  alarm_description = "Alerts when the Analytics API Lambda execution duration is unusually high."
+
+  namespace   = "AWS/Lambda"
+  metric_name = "Duration"
+  statistic   = "Maximum"
+
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 20000
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.analytics_api.function_name
+  }
+
+  alarm_actions = [
+    aws_sns_topic.glue_failures.arn
+  ]
+
+  treat_missing_data = "notBreaching"
+}
