@@ -163,7 +163,9 @@ data "aws_iam_policy_document" "github_actions_deploy" {
       "lambda:UpdateFunctionConfiguration",
       "lambda:DeleteFunction",
       "lambda:AddPermission",
-      "lambda:RemovePermission"
+      "lambda:RemovePermission",
+      "lambda:TagResource",
+      "lambda:UntagResource"
     ]
 
     resources = ["*"]
