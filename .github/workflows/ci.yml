@@ -33,6 +33,8 @@ jobs:
           pip install pytest
 
       - name: Run Analytics API unit tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/functions/analytics_api
         run: pytest tests -v -m "not integration"
       
   pyspark-tests:
