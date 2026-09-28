@@ -43,3 +43,26 @@ jobs:
 
       - name: Terraform Apply
         run: terraform apply -input=false -auto-approve tfplan
+        
+      - name: Smoke Test Analytics API
+        run: |
+          API_URL=$(terraform output -raw analytics_api_url)
+
+          echo "Testing Analytics API..."
+          echo "Endpoint: $API_URL"
+
+          HTTP_STATUS=$(curl --silent \
+            --output /tmp/analytics-response.json \
+            --write-out "%{http_code}" \
+            "$API_URL")
+
+          echo "HTTP status: $HTTP_STATUS"
+          echo "Response:"
+          cat /tmp/analytics-response.json
+
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "Smoke test failed: expected HTTP 200, received $HTTP_STATUS"
+            exit 1
+          fi
+
+          echo "Smoke test passed."
