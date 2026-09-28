@@ -1,9 +1,11 @@
 from unittest.mock import patch
 
+import pytest
+
 from repositories.athena_queries import AthenaQueries
 from services.athena_service import AthenaService
 
-
+@pytest.mark.integration
 def test_athena_service_runs_sales_by_state_query():
     query = AthenaQueries.sales_by_state(limit=5)
 
