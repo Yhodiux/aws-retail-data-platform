@@ -169,10 +169,8 @@ Amazon SNS
     |
     v
 Email Notification
-
-
-![CloudWatch Analytics API alarm email notification](docs/screenshots/mail.png)
 ```
+![CloudWatch Analytics API alarm email notification](docs/screenshots/mail.png)
 
 ## What this project demonstrates
 
