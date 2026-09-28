@@ -28,6 +28,12 @@ resource "aws_lambda_function" "analytics_api" {
   timeout     = 30
   memory_size = 256
 
+  tags = {
+    Project   = "aws-retail-data-platform"
+    ManagedBy = "Terraform"
+    CI_CD     = "GitHub-Actions"
+  }
+
   environment {
     variables = {
       ATHENA_DATABASE        = local.gold_database
