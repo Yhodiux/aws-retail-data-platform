@@ -18,3 +18,4 @@ __pycache__/
 # Terraform Lambda build/test artifacts
 infra/terraform/analytics_api.zip
 infra/terraform/lambda-response.json
+*.tfplan
