@@ -41,6 +41,12 @@ All notable repository changes will be documented in this file. AWS deployment s
 - Terraform-managed Amazon API Gateway HTTP API exposing the Analytics API through `GET /analytics`.
 - API Gateway Lambda proxy integration, automatic `$default` stage deployment, CORS configuration, and least-privilege Lambda invocation permission.
 - Terraform output for the deployed Analytics API HTTP endpoint.
+- GitHub Actions CI/CD workflows for Terraform Plan and controlled Terraform Apply deployments.
+- GitHub OIDC authentication with a dedicated AWS IAM role, eliminating long-lived AWS access keys from the CI/CD deployment path.
+- Post-deployment Analytics API smoke test that resolves the deployed endpoint from Terraform output and requires an HTTP 200 response.
+- Terraform-managed Amazon CloudWatch alarms for Analytics API Lambda execution errors and high execution duration.
+- Amazon SNS integration for Analytics API CloudWatch alarm email notifications.
+- Monitoring evidence for the validated CloudWatch -> SNS -> email alert path in `docs/screenshots/mail.png`.
 
 ### Changed
 
@@ -82,3 +88,8 @@ All notable repository changes will be documented in this file. AWS deployment s
 - Redeployed `olist-analytics-api-dev` with multi-operation routing while preserving the default `sales_by_state` behavior.
 - Validated all five analytical operations end to end through the deployed Lambda against Athena and `olist_gold_db`.
 - Exposed and validated the Analytics API over HTTP through API Gateway, including default `sales_by_state` requests and parameterized `top_sellers` requests.
+- Extended the GitHub Actions deployment workflow with an automated post-deployment Analytics API smoke test.
+- Extended platform observability from Glue job monitoring to Analytics API Lambda error and duration monitoring.
+- Extended the existing SNS alerting path to include Analytics API CloudWatch alarms.
+- Validated the complete Terraform deployment workflow through GitHub Actions, including infrastructure deployment and a successful live API smoke test.
+- Updated the README and architecture documentation to reflect the deployed Analytics API, CI/CD workflow, observability, alerting, and post-deployment validation.

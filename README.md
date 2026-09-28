@@ -6,7 +6,7 @@ Portfolio project demonstrating an end-to-end AWS analytics data platform for th
 >
 > Analytics API status: the API under `functions/analytics_api/` is deployed as the `olist-analytics-api-dev` AWS Lambda using Python 3.13 and exposed through an Amazon API Gateway HTTP API. All five Gold analytical operations are implemented, covered by automated tests, and validated through the deployed Lambda. The HTTP path has also been validated end to end through API Gateway, Lambda, Athena, `olist_gold_db`, and S3 Gold data.
 >
-> CI/CD status: GitHub Actions runs automated Analytics API tests, PySpark pipeline tests, and Terraform validation. AWS deployments use GitHub OIDC to assume a dedicated IAM role without storing long-lived AWS access keys in GitHub. Separate manual Terraform Plan and Terraform Apply workflows use the S3 remote state; the deployment flow has been validated end to end, including a post-deployment plan returning `No changes`.
+> CI/CD and observability status: GitHub Actions runs automated Analytics API tests, PySpark pipeline tests, and Terraform validation. AWS deployments use GitHub OIDC to assume a dedicated IAM role without storing long-lived AWS access keys in GitHub. Separate manual Terraform Plan and Terraform Apply workflows use the S3 remote state. The Apply workflow includes a post-deployment smoke test that has been validated against the live Analytics API with HTTP 200. The API is also monitored through Terraform-managed CloudWatch error and duration alarms connected to Amazon SNS email notifications, with the alert path validated end to end.
 
 ## Documentation
 
@@ -148,6 +148,31 @@ Supported operations:
 ` sales_by_state ` · ` sales_by_category ` · ` sales_by_payment_type ` · ` top_customers ` · ` top_sellers `
 
 Requests default to `sales_by_state` and accept a validated `limit` from 1 to 100.
+
+### Analytics API monitoring
+
+The Analytics API is monitored with Amazon CloudWatch alarms for Lambda
+execution errors and unusually high execution duration.
+
+Both alarms publish notifications to the existing Amazon SNS alert topic.
+
+The monitoring path has been validated end to end:
+
+```text
+AWS Lambda
+    |
+    v
+Amazon CloudWatch Alarm
+    |
+    v
+Amazon SNS
+    |
+    v
+Email Notification
+
+
+![CloudWatch Analytics API alarm email notification](docs/screenshots/mail.png)
+```
 
 ## What this project demonstrates
 
@@ -291,6 +316,10 @@ Manual infrastructure deployment
     -> AWS STS / dedicated IAM role
     -> Terraform Apply
     -> AWS infrastructure
+    -> Analytics API Smoke Test
+       -> terraform output: analytics_api_url
+       -> HTTP GET
+       -> Require HTTP 200
     -> Post-deployment Terraform Plan
 ```
 
@@ -299,6 +328,9 @@ The deployment design intentionally separates validation, planning, and infrastr
 - The main CI workflow runs the Analytics API test suite, the Docker-based PySpark pipeline tests, and Terraform validation.
 - A dedicated Terraform Plan workflow can be triggered manually to preview infrastructure changes without modifying AWS resources.
 - A separate Terraform Apply workflow performs controlled infrastructure changes only when explicitly triggered.
+-After a successful Terraform deployment, the workflow performs an automated smoke test against the deployed Analytics API.
+- The workflow retrieves the API endpoint from the Terraform `analytics_api_url` output and sends a real HTTP request to the deployed API.
+- The smoke test validates that the endpoint returns HTTP 200. If the API does not respond successfully, the GitHub Actions deployment workflow fails.
 - GitHub Actions authenticates to AWS through the repository's OIDC trust relationship and assumes the `olist-github-actions-dev` IAM role. Long-lived AWS access keys are not stored in GitHub for these workflows.
 - The GitHub Actions role combines read-only discovery with explicit project deployment permissions, including access to the Terraform state and the AWS services managed by this repository.
 - Terraform state is stored remotely in Amazon S3 under the environment-specific state path, with S3 state locking enabled.
@@ -322,13 +354,13 @@ This confirms that the committed Terraform configuration, remote state, and depl
 | Amazon Athena | SQL validation and analytics |
 | AWS Lambda | Deployed Analytics API runtime and analytical request routing |
 | Amazon API Gateway | Deployed HTTP entry point exposing `GET /analytics` |
-| Amazon CloudWatch | Glue execution logs |
+| Amazon CloudWatch | Glue execution logs plus Analytics API error and duration alarms |
 | Amazon EventBridge | Glue failure-event routing |
-| Amazon SNS | Email failure notifications |
+| Amazon SNS | Email notifications for Glue failures and Analytics API alarms |
 | IAM | Access control |
 | Power BI | Dashboard and reporting |
 | Docker | Isolated local Spark tests |
-| GitHub Actions | Automated CI, Terraform planning, and controlled infrastructure deployment |
+| GitHub Actions | Automated CI, Terraform planning, controlled infrastructure deployment, and post-deployment API smoke testing |
 | GitHub OIDC / AWS STS | Short-lived AWS authentication for CI/CD without stored access keys |
 | Terraform | Reproducible AWS infrastructure definition with S3 remote state |
 
@@ -371,7 +403,19 @@ The editable dashboard is stored at `powerbi/olist_dashboard.pbix`.
 
 ## Deployment state
 
-The active AWS platform is managed through Terraform with remote state in Amazon S3. Core infrastructure and the Glue workflow have been reconciled and validated in AWS. The Analytics API infrastructure is also Terraform-managed, including Lambda packaging and deployment, IAM permissions, Amazon API Gateway HTTP API, Lambda proxy integration, routing, and invocation permissions. All five analytical operations have been validated through the deployed Lambda, and the HTTP API has been validated end to end. GitHub Actions now provides automated CI plus manually controlled Terraform Plan and Apply workflows. AWS authentication from GitHub uses OIDC and a dedicated IAM role instead of long-lived AWS access keys. The deployment workflow has been validated with a successful GitHub Actions apply followed by a Terraform plan reporting no infrastructure drift. AWS runtime evidence and current implementation status are recorded in `docs/project-status.md`.
+The active AWS platform is managed through Terraform with remote state in Amazon S3. Core infrastructure and the Glue workflow have been reconciled and validated in AWS.
+
+The Analytics API infrastructure is also Terraform-managed, including Lambda packaging and deployment, IAM permissions, Amazon API Gateway HTTP API, Lambda proxy integration, routing, invocation permissions, and CloudWatch alarms for Lambda errors and high execution duration.
+
+All five analytical operations have been validated through the deployed Lambda, and the HTTP API has been validated end to end.
+
+GitHub Actions provides automated CI plus manually controlled Terraform Plan and Apply workflows. AWS authentication from GitHub uses OIDC and a dedicated IAM role instead of long-lived AWS access keys.
+
+The Terraform Apply workflow also performs a post-deployment smoke test against the live Analytics API. The validated deployment returned HTTP 200 and completed with `Smoke test passed.`
+
+The CloudWatch -> SNS -> email notification path has also been validated end to end, with monitoring evidence stored in `docs/screenshots/mail.png`.
+
+AWS runtime evidence and current implementation status are recorded in `docs/project-status.md`.
 
 Use the [final deployment order](docs/deployments/final-deployment-order.md) rather than deploying individual files ad hoc.
 
@@ -381,11 +425,12 @@ Brazilian E-Commerce Public Dataset by Olist: <https://www.kaggle.com/datasets/o
 
 ## Roadmap
 
+## Roadmap
+
 - Complete remaining downstream validation and Power BI refresh checks.
 - Add authentication and authorization if the Analytics API is exposed beyond controlled development use.
-- Add API-specific observability, structured logging, metrics, and alarms.
+- Add structured application logging and additional custom metrics if deeper API diagnostics are required.
 - Add throttling and usage controls where appropriate.
-- Add post-deployment API smoke tests to the existing CI/CD workflows.
 - Optional Apache Iceberg evaluation if ACID table capabilities are required.
 
 ## Author
