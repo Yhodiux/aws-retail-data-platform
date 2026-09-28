@@ -104,3 +104,136 @@ resource "aws_iam_role_policy_attachment" "github_actions_read_only" {
   role       = aws_iam_role.github_actions.name
   policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
 }
+
+# -----------------------------------------------------------------------------
+# GitHub Actions - Terraform deployment permissions
+# -----------------------------------------------------------------------------
+
+data "aws_iam_policy_document" "github_actions_deploy" {
+
+  statement {
+    sid = "DeployS3"
+
+    actions = [
+      "s3:CreateBucket",
+      "s3:DeleteBucket",
+      "s3:PutBucketVersioning",
+      "s3:PutEncryptionConfiguration",
+      "s3:PutBucketPublicAccessBlock",
+      "s3:PutObject",
+      "s3:DeleteObject"
+    ]
+
+    resources = [
+      aws_s3_bucket.data.arn,
+      "${aws_s3_bucket.data.arn}/*"
+    ]
+  }
+
+  statement {
+    sid = "DeployGlue"
+
+    actions = [
+      "glue:CreateDatabase",
+      "glue:UpdateDatabase",
+      "glue:DeleteDatabase",
+      "glue:CreateJob",
+      "glue:UpdateJob",
+      "glue:DeleteJob",
+      "glue:CreateCrawler",
+      "glue:UpdateCrawler",
+      "glue:DeleteCrawler",
+      "glue:CreateWorkflow",
+      "glue:UpdateWorkflow",
+      "glue:DeleteWorkflow",
+      "glue:CreateTrigger",
+      "glue:UpdateTrigger",
+      "glue:DeleteTrigger"
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
+    sid = "DeployLambda"
+
+    actions = [
+      "lambda:CreateFunction",
+      "lambda:UpdateFunctionCode",
+      "lambda:UpdateFunctionConfiguration",
+      "lambda:DeleteFunction",
+      "lambda:AddPermission",
+      "lambda:RemovePermission"
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
+    sid = "DeployApiGateway"
+
+    actions = [
+      "apigateway:POST",
+      "apigateway:PUT",
+      "apigateway:PATCH",
+      "apigateway:DELETE"
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
+    sid = "DeployMonitoring"
+
+    actions = [
+      "sns:CreateTopic",
+      "sns:DeleteTopic",
+      "sns:SetTopicAttributes",
+      "events:PutRule",
+      "events:DeleteRule",
+      "events:PutTargets",
+      "events:RemoveTargets"
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
+    sid = "ManageProjectIam"
+
+    actions = [
+      "iam:CreateRole",
+      "iam:DeleteRole",
+      "iam:UpdateAssumeRolePolicy",
+      "iam:PutRolePolicy",
+      "iam:DeleteRolePolicy",
+      "iam:AttachRolePolicy",
+      "iam:DetachRolePolicy",
+      "iam:TagRole",
+      "iam:UntagRole"
+    ]
+
+    resources = [
+      "arn:aws:iam::746552104319:role/olist-*"
+    ]
+  }
+
+  statement {
+    sid = "PassProjectRoles"
+
+    actions = [
+      "iam:PassRole"
+    ]
+
+    resources = [
+      "arn:aws:iam::746552104319:role/olist-*",
+      data.aws_iam_role.glue.arn
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "github_actions_deploy" {
+  name   = "olist-github-actions-deploy"
+  role   = aws_iam_role.github_actions.name
+  policy = data.aws_iam_policy_document.github_actions_deploy.json
+}
